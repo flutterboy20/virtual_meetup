@@ -1,0 +1,37 @@
+# The Docker build context is the repository root, so everything the image
+# does not need is excluded here — both to keep the context small and, more
+# importantly, to keep local runtime state out of a production image.
+
+# Build output and tool caches
+**/.dart_tool/
+**/build/
+.fvm/
+.git/
+.github/
+
+# Packages the relay image does not build. `client` in particular MUST stay
+# out: it drags in the Flutter SDK requirement that the Dockerfile's workspace
+# rewrite exists to avoid.
+client/
+tool/
+
+# Process files, never shipped
+.planning/
+CLAUDE.md
+*.kt.md
+
+# **Local runtime state.** These are gitignored, so they are invisible in
+# `git status` — but a Docker build context is the filesystem, not the index,
+# and without these lines a developer's local bans and audit trail would be
+# copied into the production image.
+**/bans.json
+**/audit.log
+**/config.json
+**/*.log
+**/*.csv
+
+# Secrets. Belt and braces: the image never copies deploy/, but a context
+# that contains a real token is a context that can leak one.
+**/.env
+deploy/data/
+deploy/web/

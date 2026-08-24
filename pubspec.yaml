@@ -1,0 +1,66 @@
+name: virtual_conference
+description: >-
+  Melos workspace root for the virtual conference walk-around world.
+  Not a published package — it only ties the three real packages together.
+publish_to: none
+
+environment:
+  sdk: ^3.13.0
+
+# Melos 7+ builds on Dart's native pub workspaces, so the package list lives
+# here (not in a melos.yaml) and every member declares `resolution: workspace`.
+workspace:
+  - client
+  - protocol
+  - server
+  - tool/loadtest
+
+dev_dependencies:
+  melos: ^8.3.0
+
+melos:
+  # Melos generates IntelliJ run configs by default; we don't want IDE files
+  # in the repo, so turn that off.
+  ide:
+    intellij:
+      enabled: false
+
+  scripts:
+    format:
+      description: Format every package; fails if anything was unformatted.
+      run: dart format --set-exit-if-changed .
+
+    analyze:
+      description: Analyze the Dart-only packages with zero tolerance.
+      exec: dart analyze --fatal-infos --fatal-warnings .
+      packageFilters:
+        flutter: false
+
+    analyze:flutter:
+      description: Analyze the Flutter packages with zero tolerance.
+      exec: flutter analyze --fatal-infos --fatal-warnings .
+      packageFilters:
+        flutter: true
+
+    test:
+      description: Run tests in the Dart-only packages that have any.
+      exec: dart test
+      packageFilters:
+        flutter: false
+        dirExists: test
+
+    test:flutter:
+      description: Run tests in the Flutter packages that have any.
+      exec: flutter test
+      packageFilters:
+        flutter: true
+        dirExists: test
+
+    ci:
+      description: Everything CI runs, in order.
+      steps:
+        - format
+        - analyze
+        - analyze:flutter
+        - test
+        - test:flutter

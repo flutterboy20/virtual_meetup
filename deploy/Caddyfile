@@ -1,0 +1,64 @@
+# One origin serves the app AND the WebSocket. That is the whole reason this
+# file exists: same-origin means no mixed content, no cross-origin config
+# fetch, and one hostname to get right instead of two.
+#
+# SITE_DOMAIN comes from deploy/.env via docker-compose.yml. Caddy obtains and
+# renews the certificate by itself once this name resolves to the VM and ports
+# 80 and 443 are reachable from the internet.
+
+{$SITE_DOMAIN} {
+	# Phase 7 measured the 2.3MB cold load on venue wifi at 09:30 as the FIRST
+	# thing that breaks — ahead of emote fan-out, egress and tick. This line is
+	# not an optimisation, it is the mitigation for the top-ranked risk.
+	encode zstd gzip
+
+	# ---------------------------------------------------------------------
+	# Relay routes. Written before the static handler because `handle` blocks
+	# are mutually exclusive and evaluated in order.
+	# ---------------------------------------------------------------------
+	#
+	# `/og-route` is the admin WEBSOCKET (server/lib/src/handler.dart), not a
+	# page. The moderation screen is reached at https://<domain>/#og-route —
+	# a fragment, which the browser never sends to a server. Typing the path
+	# form instead lands here and gets a 404 from the relay, because the path
+	# is taken.
+	@relay path /ws /og-route /config /metrics /health
+	handle @relay {
+		# Plain HTTP/1.1 upstream, which is the default. Do NOT enable h2c
+		# here: the upgrade handler rejects anything that is not 1.1 outright
+		# (`if (request.protocolVersion != '1.1') return _badRequest`), so
+		# every socket would fail with a 400 and nothing would say why.
+		reverse_proxy relay:8080
+	}
+
+	# ---------------------------------------------------------------------
+	# The Flutter web bundle
+	# ---------------------------------------------------------------------
+	handle {
+		root * /srv
+
+		# Entry points must never be cached, or a redeploy is invisible to
+		# every phone that already opened the app once — the single most
+		# likely way to ship a fix on the day and have nobody receive it.
+		@entry path / /index.html /flutter_bootstrap.js /flutter_service_worker.js /version.json
+		header @entry Cache-Control "no-cache"
+
+		# Everything under these is content-hashed by the Flutter build, so
+		# it is safe to cache hard and it is what makes a second visit fast.
+		@assets path /assets/* /canvaskit/*
+		header @assets Cache-Control "public, max-age=31536000, immutable"
+
+		header {
+			Referrer-Policy "no-referrer"
+			X-Content-Type-Options "nosniff"
+			# Do not advertise the server software.
+			-Server
+		}
+
+		# The app routes on the URL fragment, so this is a safety net for
+		# deep links rather than a requirement — but without it an unknown
+		# path is a bare 404 page instead of the app.
+		try_files {path} /index.html
+		file_server
+	}
+}

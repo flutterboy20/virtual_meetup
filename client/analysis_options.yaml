@@ -1,0 +1,12 @@
+# Rules live in the workspace root. Do not add per-package overrides
+# without a comment saying why.
+analyzer:
+  exclude:
+    - build/**
+    - android/**
+    - ios/**
+    - web/**
+    - windows/**
+    - macos/**
+    - linux/**
+include: ../analysis_options.yaml

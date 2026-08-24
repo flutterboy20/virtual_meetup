@@ -1,0 +1,47 @@
+{
+  "_comment": [
+    "Sponsor booths for the walk-around world.",
+    "This file is CONFIG, not code: adding, removing or repainting a booth",
+    "needs no rebuild of anything but the asset bundle. x/y are world units,",
+    "and the sponsor row is the east arm of the cross: x 1000-1600, y 400-800.",
+    "Names below are placeholders until the real list is confirmed."
+  ],
+  "sponsors": [
+    {
+      "id": "placeholder-a",
+      "name": "Sponsor A",
+      "tagline": "Platinum partner",
+      "blurb": "Placeholder booth. Swap this entry for a real sponsor: only this file changes.",
+      "x": 1130,
+      "y": 478,
+      "color": "#54C5F8"
+    },
+    {
+      "id": "placeholder-b",
+      "name": "Sponsor B",
+      "tagline": "Gold partner",
+      "blurb": "Placeholder booth. Every booth is painted in the brand colour named here.",
+      "x": 1330,
+      "y": 478,
+      "color": "#7ED9B6"
+    },
+    {
+      "id": "placeholder-c",
+      "name": "Sponsor C",
+      "tagline": "Community partner",
+      "blurb": "Placeholder booth. Walk up to a booth and its panel opens; walk away and it closes.",
+      "x": 1130,
+      "y": 722,
+      "color": "#F2B33D"
+    },
+    {
+      "id": "placeholder-d",
+      "name": "Sponsor D",
+      "tagline": "Hiring at this event",
+      "blurb": "Placeholder booth. Booth positions are world coordinates, so a booth can be moved without touching code.",
+      "x": 1330,
+      "y": 722,
+      "color": "#B78BE8"
+    }
+  ]
+}

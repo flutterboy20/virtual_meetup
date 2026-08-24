@@ -1,0 +1,13 @@
+{
+  "worldName": "Virtual Meetup",
+  "eyebrow": "A LITTLE WORLD FOR PEOPLE WHO SHOW UP",
+  "tagline": "Pick a bean · walk around · say hi",
+  "boardMessage": "Welcome — the surfboard is by the water",
+  "stageLines": [
+    "NEXT UP: the opening keynote",
+    "Talks run all day on this stage",
+    "Coffee is one room west"
+  ],
+  "botCounts": {},
+  "maintenanceUntil": null
+}

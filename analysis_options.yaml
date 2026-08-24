@@ -1,0 +1,17 @@
+# Shared lint + analyzer baseline for every package in the workspace.
+# Each package's own analysis_options.yaml does nothing but include this file,
+# so there is exactly one place to change the rules.
+include: package:very_good_analysis/analysis_options.yaml
+
+analyzer:
+  exclude:
+    - "**/build/**"
+    - "**/.dart_tool/**"
+    - ".fvm/**"
+    - build/**
+    - android/**
+    - ios/**
+    - web/**
+    - windows/**
+    - macos/**
+    - linux/**

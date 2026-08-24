@@ -1,0 +1,8 @@
+# Tags used by this package's tests.
+#
+# `bench` is opt-in: the water benchmark records 300 frames three times over,
+# which is CPU a normal `flutter test` run should not spend on every commit.
+# Run it deliberately with `flutter test --tags bench`.
+tags:
+  bench:
+    skip: "benchmarks are opt-in: run with --tags bench"

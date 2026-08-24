@@ -1,0 +1,85 @@
+# Production stack: the relay behind Caddy, on one VM, on one origin.
+#
+#   cd deploy
+#   cp .env.example .env      # then fill it in
+#   mkdir -p data web
+#   sudo chown -R 10001:65534 data
+#   docker compose up -d --build
+#
+# Compose auto-loads ./.env from this directory, which is both the relay's
+# runtime environment and the source of SITE_DOMAIN below.
+
+name: virtual-conference
+
+services:
+  # ---------------------------------------------------------------------
+  # The Dart relay. Never published to the host — Caddy is the only thing
+  # that can reach it, over the private compose network.
+  # ---------------------------------------------------------------------
+  relay:
+    build:
+      # The repo root, because the image needs protocol/ as well as server/.
+      context: ..
+      dockerfile: deploy/Dockerfile
+    env_file: .env
+    restart: unless-stopped
+
+    # `expose`, not `ports`. `ports` would publish 8080 on the VM's public
+    # interface and bypass both TLS and the origin check in one line.
+    expose:
+      - "8080"
+
+    volumes:
+      # config.json, bans.json and audit.log. Without this the ban list is
+      # ephemeral and every ban quietly becomes a kick on the next redeploy.
+      - ./data:/data
+
+    # Above the 512MB old-gen ceiling in DART_VM_OPTIONS, not equal to it:
+    # the heap is not the whole process. When the heap cap fires the VM
+    # aborts and `restart: unless-stopped` brings it back; if the container
+    # limit were the lower of the two, Docker would OOM-kill it first and the
+    # heap cap would never do its job.
+    mem_limit: 768m
+
+    # Catches the failure `restart` cannot: a process that is alive but has
+    # stopped answering. Uses the same /health route Caddy proxies.
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://127.0.0.1:8080/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+
+  # ---------------------------------------------------------------------
+  # Caddy: TLS, static Flutter bundle, and the reverse proxy.
+  # ---------------------------------------------------------------------
+  caddy:
+    image: caddy:2-alpine
+    restart: unless-stopped
+
+    ports:
+      - "80:80"    # required for the ACME HTTP-01 challenge, and redirects
+      - "443:443"
+
+    environment:
+      # Fails at `up` with this message rather than starting a server for a
+      # domain nobody named.
+      SITE_DOMAIN: ${SITE_DOMAIN:?set SITE_DOMAIN in deploy/.env}
+
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      # The Flutter web release build, uploaded here by the deploy workflow.
+      - ./web:/srv:ro
+      # Issued certificates. A named volume, so a `docker compose down` does
+      # not throw away certs and walk into Let's Encrypt's rate limit on the
+      # next `up`.
+      - caddy_data:/data
+      - caddy_config:/config
+
+    depends_on:
+      relay:
+        condition: service_healthy
+
+volumes:
+  caddy_data:
+  caddy_config:

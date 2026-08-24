@@ -1,0 +1,64 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+# A newer push to the same branch cancels the older run.
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+# The whole workflow only ever reads the repo. Declared here rather than left
+# to the repository default, because that default is a setting somebody can
+# change without touching this file — and a workflow that inherits write
+# scope is a workflow a compromised action can push with.
+permissions:
+  contents: read
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      # Every action is pinned to an immutable commit SHA, not a tag. A tag
+      # is a movable pointer in somebody else's repository: whoever controls
+      # it can repoint `v6` at new code, and every run of this workflow would
+      # execute it. The trailing comment records which release the SHA was,
+      # so bumping it stays a readable diff.
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+        with:
+          # The checkout leaves no credential behind in `.git/config`. Nothing
+          # here pushes, and a token left in the workspace is a token every
+          # later step — and every dependency those steps run — can read.
+          persist-credentials: false
+
+      # Keep this version in sync with .fvmrc. fvm itself is not used in CI —
+      # the runner has no other Flutter to shadow, so pinning here is enough.
+      - uses: subosito/flutter-action@1a449444c387b1966244ae4d4f8c696479add0b2 # v2.23.0
+        with:
+          channel: stable
+          flutter-version: 3.47.0
+
+      - name: Install melos
+        run: dart pub global activate melos
+
+      - name: Bootstrap workspace
+        run: melos bootstrap
+
+      # --no-select stops melos prompting for a package on filtered scripts,
+      # which would hang a non-interactive runner.
+      - name: Check formatting
+        run: melos run format --no-select
+
+      - name: Analyze (Dart packages)
+        run: melos run analyze --no-select
+
+      - name: Analyze (Flutter packages)
+        run: melos run analyze:flutter --no-select
+
+      - name: Test (Dart packages)
+        run: melos run test --no-select
+
+      - name: Test (Flutter packages)
+        run: melos run test:flutter --no-select
