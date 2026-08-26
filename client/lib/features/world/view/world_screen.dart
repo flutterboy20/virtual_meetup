@@ -2,8 +2,10 @@ import 'dart:async';
 
 import 'package:client/core/player_identity.dart';
 import 'package:client/core/server_endpoint.dart';
+import 'package:client/core/share_link.dart';
 import 'package:client/core/sponsor.dart';
 import 'package:client/core/theme.dart';
+import 'package:client/features/world/view/connection_chip.dart';
 import 'package:client/features/world/view/credit_badge.dart';
 import 'package:client/features/world/view/emote_bar.dart';
 import 'package:client/features/world/view/hud_chip.dart';
@@ -11,6 +13,7 @@ import 'package:client/features/world/view/minimap.dart';
 import 'package:client/features/world/view/online_badge.dart';
 import 'package:client/features/world/view/perf_hud.dart';
 import 'package:client/features/world/view/sponsor_panel.dart';
+import 'package:client/features/world/view/world_menu_drawer.dart';
 import 'package:client/features/world/view/world_toast.dart';
 import 'package:client/game/beach_map.dart';
 import 'package:client/game/bean_appearance.dart';
@@ -26,6 +29,17 @@ import 'package:flame/game.dart';
 import 'package:flutter/material.dart';
 import 'package:protocol/protocol.dart';
 import 'package:provider/provider.dart';
+
+/// The width, in logical pixels, under which the HUD draws itself smaller.
+///
+/// 480 rather than a tablet breakpoint: this is the width at which the two
+/// HUD columns stop leaving a middle of the screen between them. Every phone
+/// in portrait is under it and every phone in landscape is over it, which is
+/// also the right answer — landscape has the width and not the height.
+const double phoneWidth = 480;
+
+/// The gap between two chips in a HUD column, in logical pixels.
+const double hudGap = 8;
 
 /// Full-screen host for the game plus its HUD.
 ///
@@ -182,11 +196,22 @@ class _WorldScreenState extends State<WorldScreen> {
   /// so this is a flicker rather than a loading screen — and if it fails, the
   /// world still opens with no booths in it. A conference world that will not
   /// start because a sponsor's blurb has a stray comma is the wrong trade.
+  ///
+  /// This is the **first** read of the booth list. Later ones arrive down the
+  /// socket and go through [_onConfig], which stands the new booths in the
+  /// running world — a moderator's edit shows up in the room within a frame,
+  /// in front of the people who are already standing in it.
   Future<void> _start() async {
     var sponsors = const <Sponsor>[];
     var failed = false;
     try {
-      sponsors = await widget.sponsors.load();
+      // The config first, the bundled file behind it. A moderator who has
+      // pushed a sponsor list owns the booths; everybody else gets the one
+      // that shipped.
+      sponsors = await ConfigSponsorRepository(
+        widget.appConfig,
+        fallback: widget.sponsors,
+      ).load();
     } on Object {
       failed = true;
     }
@@ -209,7 +234,7 @@ class _WorldScreenState extends State<WorldScreen> {
         playerName: widget.identity.name,
         network: _network,
         config: widget.appConfig,
-        onConfig: widget.onConfig,
+        onConfig: _onConfig,
         map: gameMapFor(
           widget.mapId,
           sponsors: sponsors,
@@ -223,6 +248,39 @@ class _WorldScreenState extends State<WorldScreen> {
       );
     });
     await _supervisor.start();
+  }
+
+  /// Takes a config the server pushed while somebody is already in the world.
+  ///
+  /// Two jobs, and they belong to different layers. The app above wants to
+  /// know the config moved — that is [WorldScreen.onConfig], and it is what
+  /// keeps the front door's copy current. The world in front of the player
+  /// wants the **booths**, which is a client-side parse of an opaque config
+  /// list plus a fallback to the bundled file, and so belongs here rather
+  /// than in the game: the repository is this screen's.
+  void _onConfig(AppConfig config) {
+    widget.onConfig?.call(config);
+    unawaited(_applyBooths(config));
+  }
+
+  /// Re-reads the booth list and hands it to the running world.
+  ///
+  /// Silent on failure, unlike [_start]'s first read. A booth list that has
+  /// stopped parsing is already being shouted about on the admin screen, in
+  /// front of the person who broke it; here the honest thing is to keep
+  /// standing the booths the room already has rather than emptying an arm of
+  /// the map under everybody at once.
+  Future<void> _applyBooths(AppConfig config) async {
+    try {
+      final sponsors = await ConfigSponsorRepository(
+        config,
+        fallback: widget.sponsors,
+      ).load();
+      if (!mounted) return;
+      _game?.setSponsors(sponsors);
+    } on Object {
+      // See above.
+    }
   }
 
   /// Writes the board through to the device.
@@ -301,10 +359,116 @@ class _WorldScreenState extends State<WorldScreen> {
     // left, which is right up until a left-handed player moves the stick
     // there — two controls in one thumb's corner is worse than either side.
     final emoteOnLeft = _joystickSide == JoystickSide.right;
+    // A phone held in portrait, where the HUD and the world are competing for
+    // the same pixels. Measured on width alone because that is what decides
+    // whether there is a middle of the screen left between the two columns.
+    //
+    // On a laptop every chip stays on screen: there is room for two columns
+    // and a world between them. On a phone there is not, so the HUD keeps
+    // only what a thumb uses *while walking* — the minimap, the emotes, the
+    // joystick and the door to the other world — and everything else moves
+    // into [WorldMenuDrawer], one tap away behind the menu button.
+    final isPhone = MediaQuery.sizeOf(context).width < phoneWidth;
+    // The other world, or `null` when there is nowhere else to go.
+    final otherMap = widget.onSwitchMap != null && _otherMap != widget.mapId
+        ? _otherMap
+        : null;
+
+    final chips = <Widget>[
+      if (!isPhone)
+        HudChip(
+          onTap: () => unawaited(_toggleJoystickSide()),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const Icon(Icons.swap_horiz, size: 16),
+              const SizedBox(width: 6),
+              Text('Joystick: ${_joystickSide.label}'),
+            ],
+          ),
+        ),
+      // On screen on a phone as well as in the drawer. Walking into the other
+      // world is the one menu item that is also a thing people do mid-step,
+      // and a duplicated door costs one chip.
+      if (otherMap != null)
+        HudChip(
+          onTap: () => widget.onSwitchMap!.call(otherMap),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const Icon(Icons.explore_outlined, size: 16),
+              const SizedBox(width: 6),
+              Text('Go to ${otherMap.label}'),
+            ],
+          ),
+        ),
+      // On screen everywhere, and in the drawer as well. Passing the link on
+      // is how the room fills up: the person you want in here is standing
+      // next to you, and a control they have to go looking for is a control
+      // that gets used once, by the maker, in a demo.
+      HudChip(
+        onTap: () => unawaited(
+          shareApp(context, worldName: widget.appConfig.worldName),
+        ),
+        child: const Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(Icons.ios_share, size: 16),
+            SizedBox(width: 6),
+            Text('Share'),
+          ],
+        ),
+      ),
+      if (!isPhone && widget.onEditIdentity != null)
+        HudChip(
+          onTap: widget.onEditIdentity,
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const Icon(Icons.face_retouching_natural, size: 16),
+              const SizedBox(width: 6),
+              Text(widget.identity.name),
+            ],
+          ),
+        ),
+      if (!isPhone && widget.onLogout != null)
+        HudChip(
+          onTap: () => unawaited(_confirmLogout()),
+          child: const Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(Icons.logout, size: 16, color: AppTheme.bad),
+              SizedBox(width: 6),
+              Text('Log out'),
+            ],
+          ),
+        ),
+    ];
 
     return ChangeNotifierProvider<ConnectionSupervisor>.value(
       value: _supervisor,
       child: Scaffold(
+        drawer: isPhone
+            ? WorldMenuDrawer(
+                playerName: widget.identity.name,
+                online: _hud.online,
+                githubLink: widget.appConfig.githubLink,
+                joystickSide: _joystickSide,
+                onToggleJoystick: () => unawaited(_toggleJoystickSide()),
+                onShare: () => unawaited(
+                  shareApp(context, worldName: widget.appConfig.worldName),
+                ),
+                otherMap: otherMap,
+                onSwitchMap: widget.onSwitchMap,
+                onEditIdentity: widget.onEditIdentity,
+                onLogout: () => unawaited(_confirmLogout()),
+                boothsFailed: _boothsFailed,
+              )
+            : null,
+        // The joystick owns a bottom corner, and on the left half the time. An
+        // edge swipe that drags a drawer out from under a moving thumb is the
+        // worst possible way to lose a walk, so the button is the only way in.
+        drawerEnableOpenDragGesture: false,
         body: Stack(
           children: [
             if (game != null)
@@ -322,14 +486,20 @@ class _WorldScreenState extends State<WorldScreen> {
                         mainAxisSize: MainAxisSize.min,
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          const _ConnectionChip(),
-                          const SizedBox(height: 8),
-                          OnlineBadge(online: _hud.online),
-                          const SizedBox(height: 8),
-                          const CreditBadge(),
-                          if (_boothsFailed) ...[
+                          if (isPhone)
+                            const _MenuButton()
+                          else ...[
+                            const ConnectionChip(),
                             const SizedBox(height: 8),
-                            const _BoothWarning(),
+                            OnlineBadge(online: _hud.online),
+                            const SizedBox(height: 8),
+                            CreditBadge(
+                              githubLink: widget.appConfig.githubLink,
+                            ),
+                            if (_boothsFailed) ...[
+                              const SizedBox(height: 8),
+                              const _BoothWarning(),
+                            ],
                           ],
                           if (perfHudEnabled) ...[
                             const SizedBox(height: 8),
@@ -344,71 +514,16 @@ class _WorldScreenState extends State<WorldScreen> {
                         mainAxisSize: MainAxisSize.min,
                         crossAxisAlignment: CrossAxisAlignment.end,
                         children: [
-                          Minimap(
+                          HallAwareMinimap(
                             frames: _hud.minimap,
                             spec: MapSpec.of(widget.mapId),
+                            width: isPhone
+                                ? Minimap.phoneWidth
+                                : Minimap.deskWidth,
                           ),
-                          const SizedBox(height: 8),
-                          HudChip(
-                            onTap: () => unawaited(_toggleJoystickSide()),
-                            child: Row(
-                              mainAxisSize: MainAxisSize.min,
-                              children: [
-                                const Icon(Icons.swap_horiz, size: 16),
-                                const SizedBox(width: 6),
-                                Text('Joystick: ${_joystickSide.label}'),
-                              ],
-                            ),
-                          ),
-                          if (widget.onSwitchMap != null &&
-                              _otherMap != widget.mapId) ...[
-                            const SizedBox(height: 8),
-                            HudChip(
-                              onTap: () => widget.onSwitchMap!.call(_otherMap),
-                              child: Row(
-                                mainAxisSize: MainAxisSize.min,
-                                children: [
-                                  const Icon(Icons.explore_outlined, size: 16),
-                                  const SizedBox(width: 6),
-                                  Text('Go to ${_otherMap.label}'),
-                                ],
-                              ),
-                            ),
-                          ],
-                          if (widget.onEditIdentity != null) ...[
-                            const SizedBox(height: 8),
-                            HudChip(
-                              onTap: widget.onEditIdentity,
-                              child: Row(
-                                mainAxisSize: MainAxisSize.min,
-                                children: [
-                                  const Icon(
-                                    Icons.face_retouching_natural,
-                                    size: 16,
-                                  ),
-                                  const SizedBox(width: 6),
-                                  Text(widget.identity.name),
-                                ],
-                              ),
-                            ),
-                          ],
-                          if (widget.onLogout != null) ...[
-                            const SizedBox(height: 8),
-                            HudChip(
-                              onTap: () => unawaited(_confirmLogout()),
-                              child: const Row(
-                                mainAxisSize: MainAxisSize.min,
-                                children: [
-                                  Icon(
-                                    Icons.logout,
-                                    size: 16,
-                                    color: AppTheme.bad,
-                                  ),
-                                  SizedBox(width: 6),
-                                  Text('Log out'),
-                                ],
-                              ),
-                            ),
+                          for (final chip in chips) ...[
+                            const SizedBox(height: hudGap),
+                            chip,
                           ],
                         ],
                       ),
@@ -455,6 +570,46 @@ class _WorldScreenState extends State<WorldScreen> {
   }
 }
 
+/// The phone's way into [WorldMenuDrawer].
+///
+/// Carries the connection phase as well as the hamburger, because the drawer
+/// it opens is now where "Reconnecting…" lives — and a socket that has dropped
+/// is the one piece of HUD state a player must not have to go looking for.
+/// Silent while the socket is healthy, which is almost always.
+class _MenuButton extends StatelessWidget {
+  const _MenuButton();
+
+  @override
+  Widget build(BuildContext context) {
+    final phase = context.watch<ConnectionSupervisor>().phase;
+    final healthy = phase == ConnectionPhase.connected;
+
+    return Builder(
+      builder: (context) => HudChip(
+        onTap: Scaffold.of(context).openDrawer,
+        child: Semantics(
+          button: true,
+          label: 'Menu. ${ConnectionChip.labelFor(phase)}',
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const Icon(Icons.menu, size: 18),
+              if (!healthy) ...[
+                const SizedBox(width: 6),
+                Icon(
+                  ConnectionChip.iconFor(phase),
+                  size: 16,
+                  color: ConnectionChip.colorFor(phase),
+                ),
+              ],
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
 /// Says the booth config could not be read, without stopping the world.
 class _BoothWarning extends StatelessWidget {
   const _BoothWarning();
@@ -472,54 +627,4 @@ class _BoothWarning extends StatelessWidget {
       ),
     );
   }
-}
-
-/// Shows whether the client is talking to the server.
-///
-/// Small and calm on purpose. A dropped socket is not an error screen and not
-/// a modal: the player's own bean keeps walking, because it always owned its
-/// own position, and this chip is the only thing that changes. Bouncing
-/// somebody to the lobby because their phone lost wifi for four seconds is
-/// the failure Phase 4 exists to prevent.
-class _ConnectionChip extends StatelessWidget {
-  const _ConnectionChip();
-
-  @override
-  Widget build(BuildContext context) {
-    final phase = context.watch<ConnectionSupervisor>().phase;
-
-    return HudChip(
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Icon(_iconFor(phase), size: 16, color: _colorFor(phase)),
-          const SizedBox(width: 6),
-          Text(_labelFor(phase)),
-        ],
-      ),
-    );
-  }
-
-  static IconData _iconFor(ConnectionPhase phase) => switch (phase) {
-    ConnectionPhase.connected => Icons.cloud_done,
-    ConnectionPhase.connecting => Icons.cloud_sync,
-    ConnectionPhase.waiting || ConnectionPhase.reconnecting => Icons.cloud_sync,
-    ConnectionPhase.idle => Icons.cloud_queue,
-  };
-
-  static Color _colorFor(ConnectionPhase phase) => switch (phase) {
-    ConnectionPhase.connected => AppTheme.good,
-    ConnectionPhase.connecting => AppTheme.warn,
-    ConnectionPhase.waiting || ConnectionPhase.reconnecting => AppTheme.warn,
-    ConnectionPhase.idle => AppTheme.mutedInk,
-  };
-
-  static String _labelFor(ConnectionPhase phase) => switch (phase) {
-    ConnectionPhase.connected => 'Connected',
-    ConnectionPhase.connecting => 'Connecting…',
-    // One word for the whole waiting-then-retrying cycle, so it does not
-    // flicker between two labels once a second while the backoff runs.
-    ConnectionPhase.waiting || ConnectionPhase.reconnecting => 'Reconnecting…',
-    ConnectionPhase.idle => 'Offline',
-  };
 }

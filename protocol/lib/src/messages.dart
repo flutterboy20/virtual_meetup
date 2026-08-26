@@ -634,6 +634,61 @@ class PlayerBoardMessage extends ProtocolMessage {
   String toString() => 'PlayerBoardMessage($id: $hasBoard)';
 }
 
+/// Server to a client: this player is showing under a different name now.
+///
+/// The one thing a snapshot cannot say. Metadata travels **once**, when a
+/// player appears, which is what makes interest management cheap — and it is
+/// also why a moderator taking somebody's name away had, until this message,
+/// no way of reaching the screens that were already drawing it. The old
+/// answer was to make every client forget the player so the next tick
+/// re-announced them; that works, but it rides on the neighbour cap keeping
+/// its slot for somebody it has just been told is a stranger, which in a
+/// packed atrium is exactly when it will not.
+///
+/// So the rename is now stated outright, to everybody who can see them **and
+/// to the player themselves**. The last part is the visible half: a muted
+/// person who still sees their own name over their own bean has no idea
+/// anything happened, and cannot tell the difference between a mute and a
+/// bug.
+///
+/// Carries the name the world should *show*, not the one they chose. The
+/// chosen name never leaves the server once it has been taken away.
+@immutable
+class PlayerRenamedMessage extends ProtocolMessage {
+  /// Creates a rename.
+  const PlayerRenamedMessage({required this.id, required this.name});
+
+  /// Reads a rename from its JSON form.
+  factory PlayerRenamedMessage.fromJson(Map<String, Object?> json) =>
+      PlayerRenamedMessage(
+        id: readString(json, 'id'),
+        name: readString(json, 'name'),
+      );
+
+  /// Whose name changed. The server's id, so a client can match it to a bean
+  /// it is already drawing — or to itself.
+  final String id;
+
+  /// The name to show from now on.
+  final String name;
+
+  @override
+  MessageType get type => MessageType.playerRenamed;
+
+  @override
+  Map<String, Object?> toJson() => {...envelope(), 'id': id, 'name': name};
+
+  @override
+  bool operator ==(Object other) =>
+      other is PlayerRenamedMessage && other.id == id && other.name == name;
+
+  @override
+  int get hashCode => Object.hash(type, id, name);
+
+  @override
+  String toString() => 'PlayerRenamedMessage($id: $name)';
+}
+
 /// Server to client: the numbers about the world nobody can see for
 /// themselves.
 ///

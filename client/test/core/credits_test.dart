@@ -1,5 +1,6 @@
 import 'package:client/core/credits.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:protocol/protocol.dart';
 
 void main() {
   group('the social links', () {
@@ -54,6 +55,38 @@ void main() {
       );
 
       expect(portfolio.url, equals(Credits.authorUrl));
+    });
+  });
+
+  group('the printed form of a link', () {
+    test('drops the scheme and nothing else', () {
+      // A shortening a person can check against the QR above it, not a
+      // rewrite they have to trust instead of the link.
+      expect(
+        Credits.linkLabel('https://github.com/flutterboy20/virtual_conference'),
+        equals('github.com/flutterboy20/virtual_conference'),
+      );
+    });
+
+    test('drops a trailing slash', () {
+      expect(
+        Credits.linkLabel('https://example.dev/'),
+        equals('example.dev'),
+      );
+    });
+
+    test('handles http as well as https', () {
+      expect(Credits.linkLabel('http://example.dev'), equals('example.dev'));
+    });
+
+    test('leaves anything else exactly as written', () {
+      expect(Credits.linkLabel('example.dev/x'), equals('example.dev/x'));
+    });
+
+    test('the fallback is the same URL the protocol defaults to', () {
+      // Two copies of a URL is two chances to ship a dead one — the same rule
+      // the portfolio entry above follows.
+      expect(Credits.repositoryUrl, equals(AppConfig.defaultGithubLink));
     });
   });
 }

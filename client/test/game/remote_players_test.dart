@@ -399,6 +399,63 @@ void main() {
     );
   });
 
+  group('a moderator rename', () {
+    testWithGame<FlameGame>(
+      'changes the name over a bean already on screen',
+      FlameGame.new,
+      (game) async {
+        final remotes = await mount(game);
+        remotes.apply(arrival([alice, bob]));
+        await game.ready();
+
+        remotes.apply(
+          const PlayerRenamedMessage(id: 'p1', name: 'Guest'),
+        );
+
+        final names = {
+          for (final view in remotes.views) view.id: view.name,
+        };
+        expect(names['p1'], equals('Guest'));
+        expect(names['p2'], equals('Bob'));
+      },
+    );
+
+    testWithGame<FlameGame>(
+      'leaves the bean itself alone',
+      FlameGame.new,
+      (game) async {
+        // A rename is a name and nothing else: it must not move anybody or
+        // reset the history their motion is interpolated from.
+        final remotes = await mount(game);
+        remotes.apply(arrival([alice]));
+        await game.ready();
+
+        remotes.apply(
+          const PlayerRenamedMessage(id: 'p1', name: 'Guest'),
+        );
+
+        expect(remotes.count, equals(1));
+        expect(remotes.beanOf('p1'), isNotNull);
+      },
+    );
+
+    testWithGame<FlameGame>(
+      'is ignored for somebody out of view',
+      FlameGame.new,
+      (game) async {
+        // Safe to drop: the next snapshot carries the current name on
+        // appearance, so walking up to them shows the right one anyway.
+        final remotes = await mount(game);
+
+        remotes.apply(
+          const PlayerRenamedMessage(id: 'nobody', name: 'Guest'),
+        );
+
+        expect(remotes.count, isZero);
+      },
+    );
+  });
+
   group('clear', () {
     testWithGame<FlameGame>(
       'empties the world of other people',

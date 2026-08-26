@@ -1,6 +1,7 @@
 import 'dart:convert';
 import 'dart:io';
 
+import 'package:crypto/crypto.dart';
 import 'package:protocol/protocol.dart';
 
 /// The file bans are written to when nothing overrides it.
@@ -140,6 +141,22 @@ class ModerationState {
   /// this.
   final Map<String, Set<String>> _blockedNames = {};
 
+  /// Banned sessions, mapped to the name they were banned under.
+  ///
+  /// **In memory only, on purpose.** The list on disk holds session ids and
+  /// nothing else: a file of the names people were removed for is a document
+  /// somebody then has to own, and it would outlive the event that needed it.
+  /// A ban taken during this run is labelled in the admin list; one loaded
+  /// from disk is a handle and a date the server no longer knows.
+  ///
+  /// That is the right trade because of *when* unbans happen. A moderator
+  /// changes their mind about a ban minutes after taking it, in the same run,
+  /// while the room is still going.
+  final Map<String, String> _bannedNames = {};
+
+  /// Banned sessions, mapped to when the ban was taken. In memory, as above.
+  final Map<String, DateTime> _bannedAt = {};
+
   /// Muted sessions, mapped to the name they chose.
   ///
   /// The chosen name is kept so an unmute can give it back, and so the admin
@@ -236,19 +253,80 @@ class ModerationState {
   /// Persisted on the way out rather than on a timer: a ban that is lost
   /// because the server restarted forty seconds later is a ban that did not
   /// happen, and the person it was for is back in the room.
-  void ban(String sessionId) {
+  ///
+  /// [name] labels the ban in the admin list and is kept **in memory only**;
+  /// see [_bannedNames].
+  void ban(String sessionId, {String name = ''}) {
     if (!_banned.add(sessionId)) return;
+    if (name.isNotEmpty) _bannedNames[sessionId] = name;
+    _bannedAt[sessionId] = _now();
     _storage.save(_banned);
   }
 
   /// Lifts a ban on [sessionId] and persists the list.
   ///
-  /// Not reachable from the admin screen — an unban is a considered decision,
-  /// not a thing to fat-finger on a phone. It exists so a mistake can be
-  /// corrected by editing the ban file, and so the rule has a tested inverse.
+  /// Reachable from the admin screen through [unbanByHandle], which is the
+  /// only form that can be reached from *outside* the server: this one takes
+  /// the session id, and a session id never goes on the wire.
   void unban(String sessionId) {
     if (!_banned.remove(sessionId)) return;
+    _bannedNames.remove(sessionId);
+    _bannedAt.remove(sessionId);
     _storage.save(_banned);
+  }
+
+  /// The handle [sessionId]'s ban is shown and lifted by.
+  ///
+  /// A truncated SHA-256, which buys three things at once. It is **one-way**,
+  /// so the admin screen can name a ban without ever holding the bearer token
+  /// behind it. It is **deterministic**, so a ban read back off disk after a
+  /// restart has the same handle it had before — without that, a persisted
+  /// ban could never be lifted from the screen. And it needs **nothing
+  /// stored**, so the ban file keeps the shape it has always had and there is
+  /// no migration.
+  ///
+  /// Sixteen hex characters. Collisions would have to be found across the
+  /// handful of bans one event takes, and the worst a collision could do is
+  /// lift the wrong ban — for an authorised moderator who can ban again in
+  /// one tap.
+  static String banHandleFor(String sessionId) =>
+      sha256.convert(utf8.encode(sessionId)).toString().substring(0, 16);
+
+  /// Every ban in force, newest first, as the admin screen needs to see them.
+  ///
+  /// Bans this run knows about come first, most recent first; the ones it has
+  /// forgotten — loaded from disk on start — sort after them by handle, so
+  /// the order is stable between two pushes a second apart.
+  List<BannedSession> get bans {
+    final remembered = <BannedSession>[];
+    final forgotten = <BannedSession>[];
+    for (final sessionId in _banned) {
+      final row = BannedSession(
+        id: banHandleFor(sessionId),
+        name: _bannedNames[sessionId] ?? '',
+        bannedAt: _bannedAt[sessionId],
+      );
+      (row.bannedAt == null ? forgotten : remembered).add(row);
+    }
+    remembered.sort((a, b) => b.bannedAt!.compareTo(a.bannedAt!));
+    forgotten.sort((a, b) => a.id.compareTo(b.id));
+    return [...remembered, ...forgotten];
+  }
+
+  /// Lifts the ban named by [handle], reporting the name it was under.
+  ///
+  /// Returns `null` when no ban answers to that handle — a row tapped a
+  /// moment after somebody else lifted it, or a handle that was never one.
+  /// The empty string is a real answer: the ban was lifted and this server
+  /// no longer remembers whose it was.
+  String? unbanByHandle(String handle) {
+    for (final sessionId in _banned) {
+      if (banHandleFor(sessionId) != handle) continue;
+      final name = _bannedNames[sessionId] ?? '';
+      unban(sessionId);
+      return name;
+    }
+    return null;
   }
 
   /// Takes [sessionId]'s name away, remembering [chosenName] for the unmute.

@@ -560,6 +560,117 @@ void main() {
     });
   });
 
+  group('the ban list', () {
+    test('starts empty and takes what the server pushes', () async {
+      final it = await unlocked();
+      expect(it.model.bans, isEmpty);
+
+      it.socket.emit(
+        AdminBanListMessage(
+          bans: [
+            BannedSession(
+              id: '0123456789abcdef',
+              name: 'Rude',
+              bannedAt: DateTime.utc(2026, 8, 22, 18, 30),
+            ),
+          ],
+        ),
+      );
+      await pumpEventQueue();
+
+      expect(it.model.bans.single.name, equals('Rude'));
+    });
+
+    test('an unban names the handle, never a session id', () async {
+      // The screen has never held one and cannot: the server does not send
+      // them. This pins the shape so a future edit cannot quietly start.
+      final it = await unlocked();
+
+      it.model.unban('0123456789abcdef');
+      await pumpEventQueue();
+
+      final sent = it.socket.sentMessages.whereType<AdminUnbanMessage>().single;
+      expect(sent.banId, equals('0123456789abcdef'));
+    });
+
+    test('a forgotten ban still reads as a ban', () async {
+      final it = await unlocked();
+
+      it.socket.emit(
+        const AdminBanListMessage(
+          bans: [BannedSession(id: 'fedcba9876543210')],
+        ),
+      );
+      await pumpEventQueue();
+
+      expect(it.model.bans.single.isRemembered, isFalse);
+    });
+  });
+
+  group('the booth list', () {
+    test('sends a whole document, like the dials do', () async {
+      final it = await unlocked();
+      it.socket.emit(
+        const ConfigMessage(config: AppConfig(worldName: 'DashConf')),
+      );
+      await pumpEventQueue();
+
+      it.model.setSponsors([
+        {'id': 'acme', 'name': 'Acme', 'x': 1130.0, 'y': 478.0},
+      ]);
+      await pumpEventQueue();
+
+      final sent = it.socket.sentMessages
+          .whereType<AdminSetConfigMessage>()
+          .single;
+      final pushed = parseAppConfig(sent.document);
+      expect(pushed.sponsors.single['id'], equals('acme'));
+      expect(
+        pushed.worldName,
+        equals('DashConf'),
+        reason: 'editing a booth must not revert the copy',
+      );
+    });
+
+    test('an empty list is how the bundled one is asked for', () async {
+      final it = await unlocked();
+
+      it.model.setSponsors(const []);
+      await pumpEventQueue();
+
+      final sent = it.socket.sentMessages
+          .whereType<AdminSetConfigMessage>()
+          .single;
+      expect(parseAppConfig(sent.document).sponsors, isEmpty);
+    });
+
+    test('a list the world would refuse is not sent at all', () async {
+      // Unlike a hand-typed document, this list is one the screen built out
+      // of its own fields. Sending it to be refused would report a bug here
+      // as a mistake there.
+      final it = await unlocked();
+
+      it.model.setSponsors(
+        const [
+          {'id': 'a'},
+          {'id': 'a'},
+        ],
+        validate: (entries) {
+          if (entries.length > 1) {
+            throw const FormatException('two sponsors share the id "a"');
+          }
+        },
+      );
+      await pumpEventQueue();
+
+      expect(
+        it.socket.sentMessages.whereType<AdminSetConfigMessage>(),
+        isEmpty,
+      );
+      expect(it.model.feedback?.isError, isTrue);
+    });
+  });
+
   group('maintenance', () {
     Future<AdminSetMaintenanceMessage?> sentMaintenance(
       FakeSocket socket,
@@ -584,6 +695,31 @@ void main() {
         sent?.until?.millisecondsSinceEpoch,
         equals(until.millisecondsSinceEpoch),
       );
+    });
+
+    test('carries the notice and the clock flag', () async {
+      final it = await unlocked();
+
+      it.model.setMaintenance(
+        token: token,
+        until: DateTime.now().add(const Duration(hours: 2)),
+        message: '  The keynote overran.  ',
+        showTimer: false,
+      );
+
+      final sent = await sentMaintenance(it.socket);
+      expect(sent?.message, equals('The keynote overran.'));
+      expect(sent?.showTimer, isFalse);
+    });
+
+    test('reopening sends the defaults, which is what clears them', () async {
+      final it = await unlocked();
+
+      it.model.setMaintenance(token: token);
+
+      final sent = await sentMaintenance(it.socket);
+      expect(sent?.message, isEmpty);
+      expect(sent?.showTimer, isTrue);
     });
 
     test('a null until is how the event is reopened', () async {

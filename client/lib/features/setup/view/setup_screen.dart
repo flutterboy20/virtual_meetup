@@ -73,27 +73,35 @@ class _SetupScreenState extends State<SetupScreen> {
       ),
       body: SafeArea(
         child: Center(
-          child: SingleChildScrollView(
-            padding: const EdgeInsets.fromLTRB(24, 8, 24, 32),
-            child: ConstrainedBox(
-              constraints: const BoxConstraints(maxWidth: 420),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  _Preview(model: _model),
-                  const SizedBox(height: 24),
-                  _NameField(model: _model, controller: _nameController),
-                  const SizedBox(height: 24),
-                  const _SectionLabel('Colour'),
-                  const SizedBox(height: 8),
-                  _ColorPicker(model: _model),
-                  const SizedBox(height: 24),
-                  const _SectionLabel('Extras'),
-                  const SizedBox(height: 8),
-                  _CosmeticPicker(model: _model),
-                  const SizedBox(height: 32),
-                  _EnterButton(model: _model, onPressed: _enter),
-                ],
+          // No scrollbar, for the same reason the welcome screen has none:
+          // this is one card you fill in, and a track down the edge of the
+          // window makes it read as a page of a form.
+          child: ScrollConfiguration(
+            behavior: ScrollConfiguration.of(
+              context,
+            ).copyWith(scrollbars: false),
+            child: SingleChildScrollView(
+              padding: const EdgeInsets.fromLTRB(24, 8, 24, 32),
+              child: ConstrainedBox(
+                constraints: const BoxConstraints(maxWidth: 420),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    _Preview(model: _model),
+                    const SizedBox(height: 24),
+                    _NameField(model: _model, controller: _nameController),
+                    const SizedBox(height: 24),
+                    const _SectionLabel('Colour'),
+                    const SizedBox(height: 8),
+                    _ColorPicker(model: _model),
+                    const SizedBox(height: 24),
+                    const _SectionLabel('Extras'),
+                    const SizedBox(height: 8),
+                    _CosmeticPicker(model: _model),
+                    const SizedBox(height: 32),
+                    _EnterButton(model: _model, onPressed: _enter),
+                  ],
+                ),
               ),
             ),
           ),

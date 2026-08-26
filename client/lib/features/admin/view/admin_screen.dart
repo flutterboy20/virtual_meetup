@@ -2,10 +2,12 @@ import 'dart:async';
 import 'dart:convert';
 
 import 'package:client/core/event_clock.dart';
+import 'package:client/core/sponsor.dart';
 import 'package:client/core/theme.dart';
 import 'package:client/features/admin/view_model/admin_view_model.dart';
 import 'package:client/game/beach_map.dart';
 import 'package:client/game/world_layout.dart';
+import 'package:client/services/sponsor_repository.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:protocol/protocol.dart';
@@ -198,18 +200,19 @@ class _Unlocked extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return const DefaultTabController(
-      length: 2,
+      length: 3,
       child: Column(
         children: [
           TabBar(
             tabs: [
               Tab(text: 'PEOPLE'),
+              Tab(text: 'BANNED'),
               Tab(text: 'EVENT'),
             ],
           ),
           Expanded(
             child: TabBarView(
-              children: [_PlayerList(), _EventPanel()],
+              children: [_PlayerList(), _BanList(), _EventPanel()],
             ),
           ),
         ],
@@ -505,7 +508,7 @@ class _PlayerRow extends StatelessWidget {
               title: 'Ban ${player.name}?',
               body:
                   'They are disconnected and blocked for the rest of the '
-                  'event. This is not undoable from here.',
+                  'event. You can lift it again from the Banned tab.',
               confirmLabel: 'Ban',
               isDestructive: true,
               onConfirm: () => model.ban(player.id),
@@ -515,44 +518,49 @@ class _PlayerRow extends StatelessWidget {
       ),
     );
   }
+}
 
-  /// Puts one question in front of the moderator before anything happens.
-  ///
-  /// Every action gets one, including the mild ones. The rows reorder as
-  /// people are muted and as the list refreshes, so the realistic mistake is
-  /// not "meant to kick, tapped ban" — it is "tapped the right button on the
-  /// wrong row". A dialog naming the person is what catches that.
-  Future<void> _confirm(
-    BuildContext context, {
-    required String title,
-    required String body,
-    required String confirmLabel,
-    required VoidCallback onConfirm,
-    bool isDestructive = false,
-  }) async {
-    final confirmed = await showDialog<bool>(
-      context: context,
-      builder: (context) => AlertDialog(
-        backgroundColor: AppTheme.surface,
-        title: Text(title),
-        content: Text(body),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(context).pop(false),
-            child: const Text('Cancel'),
+/// Puts one question in front of the moderator before anything happens.
+///
+/// Every action gets one, including the mild ones. The rows reorder as people
+/// are muted and as the list refreshes, so the realistic mistake is not
+/// "meant to kick, tapped ban" — it is "tapped the right button on the wrong
+/// row". A dialog naming the person is what catches that.
+///
+/// A free function rather than a method, because two different lists of rows
+/// now ask it — the people in the world and the bans left behind by the ones
+/// who are not — and a second copy of a confirmation dialog is a second place
+/// for "are you sure" to stop matching what actually happens.
+Future<void> _confirm(
+  BuildContext context, {
+  required String title,
+  required String body,
+  required String confirmLabel,
+  required VoidCallback onConfirm,
+  bool isDestructive = false,
+}) async {
+  final confirmed = await showDialog<bool>(
+    context: context,
+    builder: (context) => AlertDialog(
+      backgroundColor: AppTheme.surface,
+      title: Text(title),
+      content: Text(body),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.of(context).pop(false),
+          child: const Text('Cancel'),
+        ),
+        FilledButton(
+          onPressed: () => Navigator.of(context).pop(true),
+          style: FilledButton.styleFrom(
+            backgroundColor: isDestructive ? AppTheme.bad : null,
           ),
-          FilledButton(
-            onPressed: () => Navigator.of(context).pop(true),
-            style: FilledButton.styleFrom(
-              backgroundColor: isDestructive ? AppTheme.bad : null,
-            ),
-            child: Text(confirmLabel),
-          ),
-        ],
-      ),
-    );
-    if (confirmed ?? false) onConfirm();
-  }
+          child: Text(confirmLabel),
+        ),
+      ],
+    ),
+  );
+  if (confirmed ?? false) onConfirm();
 }
 
 /// One icon button, sized for a thumb.
@@ -597,6 +605,13 @@ class _EventPanelState extends State<_EventPanel> {
   /// that dialog closes.
   final TextEditingController _tokenField = TextEditingController();
 
+  /// The sentence a paused room is shown, while its dialog is open.
+  ///
+  /// Owned by the panel for the same reason [_tokenField] is: a controller
+  /// built per dialog has to be disposed while the route it belongs to is
+  /// still animating out, which tears it out from under a live widget.
+  final TextEditingController _noticeField = TextEditingController();
+
   AdminViewModel? _model;
 
   /// The server's document as it was when the editor was last filled from it.
@@ -638,6 +653,7 @@ class _EventPanelState extends State<_EventPanel> {
     _tokenField
       ..clear()
       ..dispose();
+    _noticeField.dispose();
     super.dispose();
   }
 
@@ -759,6 +775,8 @@ class _EventPanelState extends State<_EventPanel> {
         ),
         const SizedBox(height: 12),
         for (final map in MapId.values) _BotDial(map: map, model: model),
+        const SizedBox(height: 28),
+        _BoothPanel(model: model, onFeedback: _say),
         const SizedBox(height: 28),
         const _SectionTitle('The event document'),
         const SizedBox(height: 4),
@@ -893,8 +911,13 @@ class _EventPanelState extends State<_EventPanel> {
       return;
     }
 
-    if (!await _confirmClosure(until, online: model.online)) return;
-    if (!mounted) return;
+    final notice = await _confirmClosure(
+      until,
+      online: model.online,
+      message: model.maintenanceMessage,
+      showTimer: model.maintenanceShowTimer,
+    );
+    if (!mounted || notice == null) return;
 
     final token = await _askToken(
       title: 'Close the event',
@@ -902,7 +925,12 @@ class _EventPanelState extends State<_EventPanel> {
     );
     if (!mounted || token == null) return;
 
-    model.setMaintenance(token: token, until: until);
+    model.setMaintenance(
+      token: token,
+      until: until,
+      message: notice.message,
+      showTimer: notice.showTimer,
+    );
   }
 
   /// Reopens the event, once the token has been typed again.
@@ -920,30 +948,32 @@ class _EventPanelState extends State<_EventPanel> {
     model.setMaintenance(token: token);
   }
 
-  Future<bool> _confirmClosure(DateTime until, {required int online}) async {
-    final confirmed = await showDialog<bool>(
+  /// Confirms the closure and collects what the paused room will be told.
+  ///
+  /// One dialog rather than two more steps. The confirmation and the notice
+  /// are the same thought — "I am shutting this, and here is why" — and the
+  /// sentence is easiest to write in front of the paragraph that says how
+  /// many people are about to read it.
+  ///
+  /// Returns `null` when the moderator backed out.
+  Future<({String message, bool showTimer})?> _confirmClosure(
+    DateTime until, {
+    required int online,
+    required String message,
+    required bool showTimer,
+  }) async {
+    // Seeded from the config, so extending a window keeps the sentence that
+    // was already on screen instead of asking for it again.
+    final notice = _noticeField..text = message;
+    return showDialog<({String message, bool showTimer})>(
       context: context,
-      builder: (context) => AlertDialog(
-        backgroundColor: AppTheme.surface,
-        title: const Text('Close the event?'),
-        content: Text(
-          'Everybody in the world right now — $online of them — will be '
-          'disconnected, and nobody can join until '
-          '${formatLocalMoment(until)}.',
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(context).pop(false),
-            child: const Text('Cancel'),
-          ),
-          FilledButton(
-            onPressed: () => Navigator.of(context).pop(true),
-            child: const Text('Continue'),
-          ),
-        ],
+      builder: (context) => _ClosureDialog(
+        until: until,
+        online: online,
+        notice: notice,
+        showTimer: showTimer,
       ),
     );
-    return confirmed ?? false;
   }
 
   /// Asks for the token again, and hands back what was typed.
@@ -1020,7 +1050,15 @@ class _EventPanelState extends State<_EventPanel> {
 /// At the bottom of the panel, under the document, on purpose: it is the
 /// thing you reach for once a day and the last thing a thumb should land on
 /// by accident.
-class _MaintenanceCard extends StatelessWidget {
+///
+/// **Stateful because it is the one card whose state changes with no message
+/// arriving.** A maintenance window ends by the clock: the server simply
+/// starts letting people in again, the config it is holding does not change,
+/// and nothing is pushed down the socket to say so. This panel only rebuilds
+/// when the config revision moves — so without a timer the card would sit
+/// there insisting the event was closed, offering a "Reopen" button for a
+/// door that had already opened, until somebody pushed an unrelated edit.
+class _MaintenanceCard extends StatefulWidget {
   const _MaintenanceCard({
     required this.model,
     required this.onClose,
@@ -1037,9 +1075,66 @@ class _MaintenanceCard extends StatelessWidget {
   final VoidCallback onReopen;
 
   @override
+  State<_MaintenanceCard> createState() => _MaintenanceCardState();
+}
+
+class _MaintenanceCardState extends State<_MaintenanceCard> {
+  /// Fires the moment the current window ends, and nothing else.
+  ///
+  /// One shot at the boundary rather than a tick a second: there is exactly
+  /// one instant at which this card's answer changes on its own, and it is
+  /// known in advance. A polling timer would spend the whole window rebuilding
+  /// a card to say the same thing.
+  Timer? _expiry;
+
+  @override
+  void initState() {
+    super.initState();
+    _scheduleExpiry();
+  }
+
+  @override
+  void didUpdateWidget(_MaintenanceCard oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    // A push may have moved the boundary — or removed it.
+    _scheduleExpiry();
+  }
+
+  @override
+  void dispose() {
+    _expiry?.cancel();
+    super.dispose();
+  }
+
+  void _scheduleExpiry() {
+    _expiry?.cancel();
+    _expiry = null;
+
+    final until = widget.model.maintenanceUntil;
+    if (until == null) return;
+    final left = until.difference(DateTime.now().toUtc());
+    if (left.isNegative) return;
+
+    // A second past the boundary, not on it. `isUnderMaintenanceAt` compares
+    // with `isBefore`, and a timer that fires on the exact microsecond would
+    // rebuild a card that still reads "closed".
+    _expiry = Timer(left + const Duration(seconds: 1), () {
+      if (mounted) setState(() {});
+    });
+  }
+
+  @override
   Widget build(BuildContext context) {
+    final model = widget.model;
+    final onClose = widget.onClose;
+    final onReopen = widget.onReopen;
     final until = model.maintenanceUntil;
     final isClosed = model.isUnderMaintenance;
+    // A window that has run out, with the timestamp still sitting in the
+    // document. The event is open — the server stopped refusing joins the
+    // moment the clock passed — and saying so is the whole point of this
+    // card, so it says so rather than showing a stale "Reopen".
+    final hasExpired = until != null && !isClosed;
 
     return Container(
       padding: const EdgeInsets.all(14),
@@ -1068,18 +1163,47 @@ class _MaintenanceCard extends StatelessWidget {
           ),
           const SizedBox(height: 6),
           Text(
-            isClosed && until != null
-                ? 'The event is closed. Nobody can join until '
-                      '${formatLocalMoment(until)}, and everybody who was in '
-                      'it has been disconnected.'
-                : 'Closing the event disconnects everybody and keeps the '
-                      'doors shut until a time you pick. Nobody is banned or '
-                      'kicked — they come back as themselves.',
+            switch ((isClosed, hasExpired)) {
+              (true, _) =>
+                'The event is closed. Nobody can join until '
+                    '${formatLocalMoment(until!)}, and everybody who was in '
+                    'it has been disconnected.',
+              (false, true) =>
+                'The window ended at ${formatLocalMoment(until!)} and the '
+                    'event is open again. Nobody was let back in '
+                    'automatically — they rejoin when they reload.',
+              (false, false) =>
+                'Closing the event disconnects everybody and keeps the '
+                    'doors shut until a time you pick. Nobody is banned or '
+                    'kicked — they come back as themselves.',
+            },
             style: TextStyle(
               color: isClosed ? AppTheme.warn : AppTheme.mutedInk,
               fontSize: 12,
             ),
           ),
+          if (isClosed && model.maintenanceMessage.isNotEmpty) ...[
+            const SizedBox(height: 6),
+            // Quoted and shown back, because the sentence was typed into a
+            // dialog that is long gone and this card is the only place a
+            // moderator can check what a locked-out room is actually reading.
+            Text(
+              '“${model.maintenanceMessage}”',
+              style: const TextStyle(
+                color: AppTheme.ink,
+                fontSize: 12,
+                fontStyle: FontStyle.italic,
+              ),
+            ),
+          ],
+          if (isClosed && !model.maintenanceShowTimer) ...[
+            const SizedBox(height: 4),
+            const Text(
+              'The countdown is hidden. They are told the event is paused, '
+              'not when it ends.',
+              style: TextStyle(color: AppTheme.mutedInk, fontSize: 11),
+            ),
+          ],
           const SizedBox(height: 12),
           if (isClosed)
             FilledButton.icon(
@@ -1103,6 +1227,610 @@ class _MaintenanceCard extends StatelessWidget {
     );
   }
 }
+
+/// The bans in force, and the one way to lift one.
+///
+/// A tab of its own rather than a section under the player list, because the
+/// two are opposites: that list is everybody **in** the world, and a banned
+/// person is by definition not in it. Folding them together would put a row
+/// you can kick next to a row you cannot, in a screen whose whole job is that
+/// a tired thumb hits the right one.
+///
+/// **No search box.** The list beside it has one because a room holds two
+/// hundred people; this one holds the handful of bans an event actually
+/// takes, and a filter over six rows is a control that only ever gets in the
+/// way.
+class _BanList extends StatelessWidget {
+  const _BanList();
+
+  @override
+  Widget build(BuildContext context) {
+    final model = context.watch<AdminViewModel>();
+    final bans = model.bans;
+
+    if (bans.isEmpty) {
+      return const Center(
+        child: Padding(
+          padding: EdgeInsets.all(32),
+          child: Text(
+            'Nobody is banned.',
+            textAlign: TextAlign.center,
+            style: TextStyle(color: AppTheme.mutedInk),
+          ),
+        ),
+      );
+    }
+
+    return ListView.builder(
+      padding: const EdgeInsets.fromLTRB(16, 12, 16, 32),
+      // One extra row for the note under the list.
+      itemCount: bans.length + 1,
+      itemBuilder: (context, index) => index == bans.length
+          ? const _BanNote()
+          : _BanRow(ban: bans[index], model: model),
+    );
+  }
+}
+
+/// One ban, and the button that lifts it.
+class _BanRow extends StatelessWidget {
+  const _BanRow({required this.ban, required this.model});
+
+  /// The ban this row is for.
+  final BannedSession ban;
+
+  /// Where the unban goes.
+  final AdminViewModel model;
+
+  @override
+  Widget build(BuildContext context) {
+    return ListTile(
+      contentPadding: EdgeInsets.zero,
+      leading: const Icon(Icons.block, size: 22, color: AppTheme.bad),
+      title: Text(
+        // A ban this server no longer remembers the owner of is still a real
+        // ban, and the honest label for it is the handle it is lifted by.
+        ban.isRemembered ? ban.name : 'Banned before the last restart',
+        overflow: TextOverflow.ellipsis,
+        style: TextStyle(
+          color: ban.isRemembered ? AppTheme.ink : AppTheme.mutedInk,
+          fontSize: 14,
+          fontStyle: ban.isRemembered ? null : FontStyle.italic,
+        ),
+      ),
+      subtitle: Text(
+        ban.bannedAt == null
+            ? ban.id
+            : '${ban.id}  ·  ${formatLocalMoment(ban.bannedAt!)}',
+        style: const TextStyle(color: AppTheme.mutedInk, fontSize: 11),
+      ),
+      trailing: _ActionButton(
+        icon: Icons.lock_open,
+        tooltip: 'Lift the ban',
+        color: AppTheme.good,
+        onPressed: () => _confirm(
+          context,
+          title: 'Lift this ban?',
+          body: ban.isRemembered
+              ? '${ban.name} will be able to join again straight away. '
+                    'Nothing else about them changes.'
+              : 'Whoever this was will be able to join again straight away. '
+                    'This server no longer remembers who they were — the ban '
+                    'list on disk keeps no names.',
+          confirmLabel: 'Lift',
+          onConfirm: () => model.unban(ban.id),
+        ),
+      ),
+    );
+  }
+}
+
+/// The paragraph under the list that says what a ban actually is.
+///
+/// Worth the space: a moderator who believes a ban is permanent will not
+/// escalate a problem that has walked back in under a new name, and the whole
+/// design accepts that it can be. Better said here, once, than discovered at
+/// the event.
+class _BanNote extends StatelessWidget {
+  const _BanNote();
+
+  @override
+  Widget build(BuildContext context) => const Padding(
+    padding: EdgeInsets.only(top: 16),
+    child: Text(
+      'A ban is on the browser this person joined from. Clearing site data '
+      'or opening a private window gets them a new identity and lets them '
+      'back in — under a new name, without their bean. This removes a '
+      'disruption in ten seconds; it is not a lock.',
+      style: TextStyle(color: AppTheme.mutedInk, fontSize: 12, height: 1.4),
+    ),
+  );
+}
+
+/// The booth editor.
+///
+/// The answer to "how does a moderator change the sponsors" that is not "hand
+/// them the JSON". The east arm of the conference is a row of booths, the
+/// list of them lands late and changes twice on the morning, and the document
+/// editor below is a text box: perfectly capable of expressing a booth and a
+/// terrible place to discover that a brand colour needs a `#`.
+///
+/// It is a **view of the same document**, not a second store. Every change
+/// here rebuilds the whole config and pushes it exactly as the crowd dials
+/// do, so the text box and this panel can never hold two different truths.
+///
+/// **Booths land live, in front of the people already in the room.** A booth
+/// is collision as well as furniture, so a push swaps the picture, the
+/// rectangle and the bean behind it together — see `ConferenceGame`. Somebody
+/// standing where a new booth appears is not sealed in: the collision resolver
+/// lets a bean in an illegal spot walk out of one, which is what makes this
+/// safe to do under a live crowd.
+class _BoothPanel extends StatelessWidget {
+  const _BoothPanel({required this.model, required this.onFeedback});
+
+  /// Where the booths come from and where a change goes.
+  final AdminViewModel model;
+
+  /// How to say something went wrong, using the panel's own toast.
+  final void Function(String message, {required bool isError}) onFeedback;
+
+  @override
+  Widget build(BuildContext context) {
+    final entries = model.sponsors;
+    // Parsed for display only. A config that arrived with a broken booth in
+    // it still has to be *editable* — refusing to draw the panel would leave
+    // the one person who can fix it looking at nothing.
+    final booths = <Sponsor?>[for (final entry in entries) _tryRead(entry)];
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        const _SectionTitle('Sponsor booths'),
+        const SizedBox(height: 4),
+        Text(
+          entries.isEmpty
+              ? 'The world is standing the booths that shipped with the app. '
+                    'Start from them and edit, or add your own.'
+              : 'These are in the event document. A change reaches '
+                    'everybody in the world straight away — the booth, its '
+                    'sign and the bean behind it move together.',
+          style: const TextStyle(color: AppTheme.mutedInk, fontSize: 12),
+        ),
+        const SizedBox(height: 12),
+        for (var i = 0; i < entries.length; i++)
+          _BoothRow(
+            booth: booths[i],
+            entry: entries[i],
+            onEdit: () => unawaited(_edit(context, i)),
+            onRemove: () => _replace([...entries]..removeAt(i)),
+          ),
+        const SizedBox(height: 4),
+        Row(
+          children: [
+            Expanded(
+              child: OutlinedButton.icon(
+                onPressed: () => unawaited(_edit(context, entries.length)),
+                icon: const Icon(Icons.add_business_outlined, size: 18),
+                label: const Text('Add a booth'),
+              ),
+            ),
+            const SizedBox(width: 8),
+            if (entries.isEmpty)
+              OutlinedButton(
+                onPressed: () => unawaited(_seedFromBundle()),
+                child: const Text('Start from the bundled list'),
+              )
+            else
+              OutlinedButton(
+                onPressed: () => _replace(const []),
+                child: const Text('Use the bundled list'),
+              ),
+          ],
+        ),
+      ],
+    );
+  }
+
+  /// Reads one entry, or `null` if it is not a booth this build understands.
+  static Sponsor? _tryRead(Map<String, Object?> entry) {
+    try {
+      return Sponsor.fromJson(entry);
+    } on FormatException {
+      return null;
+    }
+  }
+
+  /// Pushes [entries] as the new booth list, validated the way the world
+  /// will read it.
+  void _replace(List<Map<String, Object?>> entries) =>
+      model.setSponsors(entries, validate: readSponsors);
+
+  /// Copies the list that shipped in the app into the document.
+  ///
+  /// The starting point almost everybody wants: the placeholder booths are
+  /// already in the right place along the east arm, so editing four names
+  /// beats typing four objects.
+  Future<void> _seedFromBundle() async {
+    try {
+      final bundled = await const AssetSponsorRepository().load();
+      _replace([for (final sponsor in bundled) sponsor.toJson()]);
+    } on Object catch (error) {
+      onFeedback('Could not read the bundled list: $error', isError: true);
+    }
+  }
+
+  /// Opens the editor for booth [index], or for a new one past the end.
+  Future<void> _edit(BuildContext context, int index) async {
+    final entries = model.sponsors;
+    final existing = index < entries.length ? entries[index] : null;
+    final edited = await showDialog<Map<String, Object?>>(
+      context: context,
+      builder: (context) => _BoothDialog(entry: existing),
+    );
+    if (edited == null) return;
+
+    final next = [...entries];
+    if (index < next.length) {
+      next[index] = edited;
+    } else {
+      next.add(edited);
+    }
+    _replace(next);
+  }
+}
+
+/// One booth, as a row a thumb can hit.
+class _BoothRow extends StatelessWidget {
+  const _BoothRow({
+    required this.booth,
+    required this.entry,
+    required this.onEdit,
+    required this.onRemove,
+  });
+
+  /// The parsed booth, or `null` if this entry does not read as one.
+  final Sponsor? booth;
+
+  /// The raw entry, which is what a broken row still has to show.
+  final Map<String, Object?> entry;
+
+  /// Opens this booth in the editor.
+  final VoidCallback onEdit;
+
+  /// Takes it out of the list.
+  final VoidCallback onRemove;
+
+  @override
+  Widget build(BuildContext context) {
+    final sponsor = booth;
+
+    return ListTile(
+      contentPadding: EdgeInsets.zero,
+      onTap: onEdit,
+      leading: Container(
+        width: 28,
+        height: 28,
+        decoration: BoxDecoration(
+          // A booth with an unreadable colour gets the warning colour, which
+          // is both a placeholder and the point.
+          color: sponsor?.color ?? AppTheme.bad,
+          borderRadius: BorderRadius.circular(6),
+        ),
+        child: sponsor == null
+            ? const Icon(Icons.priority_high, size: 16, color: AppTheme.ink)
+            : null,
+      ),
+      title: Text(
+        sponsor?.name ?? '${entry['id'] ?? 'unnamed'} — cannot be read',
+        overflow: TextOverflow.ellipsis,
+        style: TextStyle(
+          color: sponsor == null ? AppTheme.bad : AppTheme.ink,
+          fontSize: 14,
+        ),
+      ),
+      subtitle: Text(
+        sponsor == null
+            ? 'Open it to fix the entry.'
+            : '${sponsor.id}  ·  ${sponsor.x.toInt()}, ${sponsor.y.toInt()}',
+        style: const TextStyle(color: AppTheme.mutedInk, fontSize: 11),
+      ),
+      trailing: IconButton(
+        tooltip: 'Remove',
+        onPressed: onRemove,
+        icon: const Icon(Icons.delete_outline, size: 20, color: AppTheme.bad),
+      ),
+    );
+  }
+}
+
+/// The fields of one booth.
+///
+/// Every field is a plain text box, including the two numbers and the colour.
+/// A colour picker and a pair of sliders would be nicer to use and would also
+/// be the third and fourth places in this app that decide what a booth is;
+/// the entry that comes out of here is the entry the document holds, and the
+/// world's own reader is what says whether it is valid.
+class _BoothDialog extends StatefulWidget {
+  const _BoothDialog({this.entry});
+
+  /// The booth being edited, or `null` when adding one.
+  final Map<String, Object?>? entry;
+
+  @override
+  State<_BoothDialog> createState() => _BoothDialogState();
+}
+
+class _BoothDialogState extends State<_BoothDialog> {
+  late final TextEditingController _id = _field('id');
+  late final TextEditingController _name = _field('name');
+  late final TextEditingController _tagline = _field('tagline');
+  late final TextEditingController _blurb = _field('blurb');
+  // The middle of the sponsor row, so a booth added with no thought about
+  // coordinates still lands somewhere a player walks past.
+  late final TextEditingController _x = _field('x', fallback: '1130');
+  late final TextEditingController _y = _field('y', fallback: '478');
+  late final TextEditingController _color = _field(
+    'color',
+    fallback: '#54C5F8',
+  );
+
+  String? _error;
+
+  TextEditingController _field(String key, {String fallback = ''}) {
+    final value = widget.entry?[key];
+    return TextEditingController(text: value == null ? fallback : '$value');
+  }
+
+  @override
+  void dispose() {
+    for (final controller in [_id, _name, _tagline, _blurb, _x, _y, _color]) {
+      controller.dispose();
+    }
+    super.dispose();
+  }
+
+  /// Builds the entry, or sets [_error] and returns `null`.
+  ///
+  /// Checked against `Sponsor.fromJson` — the world's own reader — rather
+  /// than against a second set of rules written here. A booth this dialog
+  /// approved and the world then refused would be the worst of both.
+  Map<String, Object?>? _build() {
+    final x = double.tryParse(_x.text.trim());
+    final y = double.tryParse(_y.text.trim());
+    if (x == null || y == null) {
+      setState(() => _error = 'x and y have to be numbers.');
+      return null;
+    }
+    final entry = <String, Object?>{
+      'id': _id.text.trim(),
+      'name': _name.text.trim(),
+      'tagline': _tagline.text.trim(),
+      'blurb': _blurb.text.trim(),
+      'x': x,
+      'y': y,
+      'color': _color.text.trim(),
+    };
+    try {
+      Sponsor.fromJson(entry);
+    } on FormatException catch (error) {
+      setState(() => _error = error.message);
+      return null;
+    }
+    return entry;
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AlertDialog(
+      backgroundColor: AppTheme.surface,
+      title: Text(widget.entry == null ? 'Add a booth' : 'Edit the booth'),
+      content: SingleChildScrollView(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            _BoothField(
+              controller: _name,
+              label: 'Name',
+              hint: 'What the sign over the booth says',
+            ),
+            _BoothField(
+              controller: _id,
+              label: 'Id',
+              hint: 'Lower case, no spaces. Never shown to anybody.',
+            ),
+            _BoothField(controller: _tagline, label: 'Tagline'),
+            _BoothField(controller: _blurb, label: 'Blurb', lines: 3),
+            Row(
+              children: [
+                Expanded(
+                  child: _BoothField(controller: _x, label: 'x'),
+                ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: _BoothField(controller: _y, label: 'y'),
+                ),
+              ],
+            ),
+            _BoothField(
+              controller: _color,
+              label: 'Colour',
+              hint: '#RRGGBB',
+            ),
+            const Text(
+              'The sponsor row is the east arm: x 1000–1600, y 400–800.',
+              style: TextStyle(color: AppTheme.mutedInk, fontSize: 11),
+            ),
+            if (_error != null) ...[
+              const SizedBox(height: 10),
+              Text(
+                _error!,
+                style: const TextStyle(color: AppTheme.bad, fontSize: 12),
+              ),
+            ],
+          ],
+        ),
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.of(context).pop(),
+          child: const Text('Cancel'),
+        ),
+        FilledButton(
+          onPressed: () {
+            final entry = _build();
+            if (entry != null) Navigator.of(context).pop(entry);
+          },
+          child: const Text('Save'),
+        ),
+      ],
+    );
+  }
+}
+
+/// One labelled box in [_BoothDialog].
+class _BoothField extends StatelessWidget {
+  const _BoothField({
+    required this.controller,
+    required this.label,
+    this.hint,
+    this.lines = 1,
+  });
+
+  /// What it edits.
+  final TextEditingController controller;
+
+  /// What it is called.
+  final String label;
+
+  /// The line under it, if it needs one.
+  final String? hint;
+
+  /// How tall it is.
+  final int lines;
+
+  @override
+  Widget build(BuildContext context) => Padding(
+    padding: const EdgeInsets.only(bottom: 10),
+    child: TextField(
+      controller: controller,
+      maxLines: lines,
+      decoration: InputDecoration(
+        labelText: label,
+        helperText: hint,
+        border: const OutlineInputBorder(),
+        isDense: true,
+      ),
+    ),
+  );
+}
+
+/// The one dialog that stands between a thumb and an empty world.
+///
+/// Stateful because two of the three things on it are answers, not warnings:
+/// the sentence the paused room will read and whether it will see a clock.
+/// The paragraph above them is unchanged — it is still the count of people
+/// about to be disconnected, which is the number that should be hardest to
+/// look away from.
+class _ClosureDialog extends StatefulWidget {
+  const _ClosureDialog({
+    required this.until,
+    required this.online,
+    required this.notice,
+    required this.showTimer,
+  });
+
+  /// When the doors open again.
+  final DateTime until;
+
+  /// How many people are about to be disconnected.
+  final int online;
+
+  /// The sentence the paused room will be shown, seeded from the config.
+  final TextEditingController notice;
+
+  /// Whether the countdown starts switched on.
+  final bool showTimer;
+
+  @override
+  State<_ClosureDialog> createState() => _ClosureDialogState();
+}
+
+class _ClosureDialogState extends State<_ClosureDialog> {
+  late bool _showTimer = widget.showTimer;
+
+  @override
+  Widget build(BuildContext context) {
+    return AlertDialog(
+      backgroundColor: AppTheme.surface,
+      title: const Text('Close the event?'),
+      content: SingleChildScrollView(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Text(
+              'Everybody in the world right now — ${widget.online} of them — '
+              'will be disconnected, and nobody can join until '
+              '${formatLocalMoment(widget.until)}.',
+            ),
+            const SizedBox(height: 16),
+            TextField(
+              controller: widget.notice,
+              maxLines: 3,
+              minLines: 2,
+              maxLength: _noticeLimit,
+              textInputAction: TextInputAction.newline,
+              decoration: const InputDecoration(
+                labelText: 'What to tell them',
+                helperText: 'Left blank, the screen says the usual thing.',
+                border: OutlineInputBorder(),
+                alignLabelWithHint: true,
+              ),
+            ),
+            SwitchListTile(
+              value: _showTimer,
+              onChanged: (value) => setState(() => _showTimer = value),
+              contentPadding: EdgeInsets.zero,
+              title: const Text(
+                'Show a countdown',
+                style: TextStyle(color: AppTheme.ink, fontSize: 14),
+              ),
+              // The honest version of the trade, in the place the choice is
+              // made: a visible clock running out on a restart that has not
+              // finished is worse than no clock at all.
+              subtitle: const Text(
+                'Off if the time above is a guess. The doors still open on '
+                'it either way.',
+                style: TextStyle(color: AppTheme.mutedInk, fontSize: 12),
+              ),
+            ),
+          ],
+        ),
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.of(context).pop(),
+          child: const Text('Cancel'),
+        ),
+        FilledButton(
+          onPressed: () => Navigator.of(context).pop((
+            message: widget.notice.text.trim(),
+            showTimer: _showTimer,
+          )),
+          child: const Text('Continue'),
+        ),
+      ],
+    );
+  }
+}
+
+/// How long a closure notice may be.
+///
+/// Two lines on a phone. This is a sentence somebody reads while they are
+/// already annoyed, not a status page, and the field it goes into rides
+/// inside the config document the server already caps.
+const int _noticeLimit = 160;
 
 /// One map's crowd dial.
 class _BotDial extends StatelessWidget {

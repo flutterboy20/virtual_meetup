@@ -30,9 +30,21 @@ class MaintenanceScreen extends StatefulWidget {
     required this.onRetry,
     super.key,
     this.until,
+    this.message = '',
+    this.showTimer = true,
     this.now = DateTime.now,
     this.recheckEvery = const Duration(seconds: 15),
   });
+
+  /// What the moderator wants this screen to say, or `''` for the built-in
+  /// sentence.
+  ///
+  /// It **replaces** the built-in line rather than joining it. A moderator who
+  /// writes "The keynote overran" has said the thing; printing the generic
+  /// sentence above it as well would make the screen argue with itself. The
+  /// reopening time is still appended, because that is a fact the screen knows
+  /// and nobody should have to retype.
+  final String message;
 
   /// When the event reopens, or `null` if this build was not told.
   ///
@@ -40,6 +52,16 @@ class MaintenanceScreen extends StatefulWidget {
   /// an older server, or one whose config fetch failed, still needs to be
   /// told the event is closed. It just cannot say for how long.
   final DateTime? until;
+
+  /// Whether to name the reopening moment at all.
+  ///
+  /// A window is a **promise**, and a moderator restarting a server they are
+  /// not sure about should be able to close the doors without making one. With
+  /// this off the screen still counts the window down internally — the button
+  /// stays locked until it runs out, because the lock is the server's rule and
+  /// not the clock's — it simply stops printing a time it might have to walk
+  /// back.
+  final bool showTimer;
 
   /// Called when the person asks to come back.
   final Future<void> Function() onRetry;
@@ -171,10 +193,32 @@ class _MaintenanceScreenState extends State<MaintenanceScreen> {
     }
   }
 
+  /// The one paragraph this screen leads with.
+  ///
+  /// Four cases, and the rule behind all of them is that the moderator's
+  /// words win: [message] replaces the built-in sentence rather than stacking
+  /// on top of it, and the reopening time is appended to whichever of the two
+  /// is being shown — but only when there is a time and the screen is allowed
+  /// to name it.
+  static String _sentence(String message, DateTime? until) {
+    final lead = message.isEmpty ? 'Somebody is working on it.' : message;
+    if (until == null) {
+      return message.isEmpty
+          ? 'Somebody is working on it. Please try again shortly.'
+          : message;
+    }
+    return '$lead The doors open again at ${formatLocalMoment(until)}.';
+  }
+
   @override
   Widget build(BuildContext context) {
     final left = _left();
     final until = widget.until;
+    // The clock is shown only when there is one *and* the moderator is
+    // willing to promise it. The window itself still runs either way: it is
+    // what keeps the button locked.
+    final clock = widget.showTimer ? until : null;
+    final message = widget.message.trim();
 
     return Scaffold(
       body: Center(
@@ -201,14 +245,11 @@ class _MaintenanceScreenState extends State<MaintenanceScreen> {
                 ),
                 const SizedBox(height: 12),
                 Text(
-                  until == null
-                      ? 'Somebody is working on it. Please try again shortly.'
-                      : 'Somebody is working on it. The doors open again at '
-                            '${formatLocalMoment(until)}.',
+                  _sentence(message, clock),
                   textAlign: TextAlign.center,
                   style: const TextStyle(color: AppTheme.ink, fontSize: 15),
                 ),
-                if (left != null) ...[
+                if (left != null && widget.showTimer) ...[
                   const SizedBox(height: 20),
                   Text(
                     'about ${formatCountdown(left)} to go',

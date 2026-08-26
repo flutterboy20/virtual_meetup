@@ -59,6 +59,8 @@ ProtocolMessage decodeMessageJson(Map<String, Object?> json) {
         return BoardMessage.fromJson(json);
       case MessageType.playerBoard:
         return PlayerBoardMessage.fromJson(json);
+      case MessageType.playerRenamed:
+        return PlayerRenamedMessage.fromJson(json);
       case MessageType.worldStats:
         return WorldStatsMessage.fromJson(json);
       case MessageType.config:
@@ -77,6 +79,10 @@ ProtocolMessage decodeMessageJson(Map<String, Object?> json) {
         return AdminKickMessage.fromJson(json);
       case MessageType.adminBan:
         return AdminBanMessage.fromJson(json);
+      case MessageType.adminBanList:
+        return AdminBanListMessage.fromJson(json);
+      case MessageType.adminUnban:
+        return AdminUnbanMessage.fromJson(json);
       case MessageType.adminMuteName:
         return AdminMuteNameMessage.fromJson(json);
       case MessageType.adminActionResult:

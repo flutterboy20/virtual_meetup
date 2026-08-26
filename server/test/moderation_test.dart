@@ -44,6 +44,119 @@ void main() {
     });
   });
 
+  group('ModerationState ban list', () {
+    final session = 'a' * 32;
+
+    test('a handle never contains the session id it is for', () {
+      // The whole reason the handle exists: a session id is a bearer token,
+      // so it must not reach the admin screen even under a trusted moderator.
+      final handle = ModerationState.banHandleFor(session);
+
+      expect(handle, isNot(contains(session)));
+      expect(session, isNot(contains(handle)));
+      expect(handle, hasLength(16));
+    });
+
+    test('the same session always gets the same handle', () {
+      // Without this a ban read off disk after a restart could never be
+      // lifted from the screen — its row would answer to a handle nobody had.
+      expect(
+        ModerationState.banHandleFor(session),
+        equals(ModerationState.banHandleFor(session)),
+      );
+      expect(
+        ModerationState.banHandleFor(session),
+        isNot(equals(ModerationState.banHandleFor('b' * 32))),
+      );
+    });
+
+    test('a ban taken this run carries the name and the moment', () {
+      final at = DateTime.utc(2026, 8, 22, 18, 30);
+      final state = ModerationState(
+        storage: InMemoryBanStorage(),
+        now: () => at,
+      )..ban(session, name: 'Rude');
+
+      final ban = state.bans.single;
+      expect(ban.id, equals(ModerationState.banHandleFor(session)));
+      expect(ban.name, equals('Rude'));
+      expect(ban.bannedAt, equals(at));
+      expect(ban.isRemembered, isTrue);
+    });
+
+    test('a ban loaded from disk has a handle and nothing else', () {
+      // The ban file keeps ids and nothing else, on purpose: a file of the
+      // names people were removed for is a document somebody has to own.
+      final state = ModerationState(storage: InMemoryBanStorage({session}));
+
+      final ban = state.bans.single;
+      expect(ban.id, equals(ModerationState.banHandleFor(session)));
+      expect(ban.name, isEmpty);
+      expect(ban.bannedAt, isNull);
+      expect(ban.isRemembered, isFalse);
+    });
+
+    test('remembered bans come first, newest of them at the top', () {
+      var clock = DateTime.utc(2026);
+      final state = ModerationState(
+        storage: InMemoryBanStorage({'c' * 32}),
+        now: () => clock,
+      )..ban('a' * 32, name: 'First');
+      clock = clock.add(const Duration(minutes: 5));
+      state.ban('b' * 32, name: 'Second');
+
+      expect(
+        state.bans.map((ban) => ban.name),
+        equals(['Second', 'First', '']),
+      );
+    });
+
+    test('unbanning by handle lifts it and says whose it was', () {
+      final storage = InMemoryBanStorage();
+      final state = ModerationState(storage: storage)
+        ..ban(session, name: 'Rude');
+
+      final name = state.unbanByHandle(ModerationState.banHandleFor(session));
+
+      expect(name, equals('Rude'));
+      expect(state.isBanned(session), isFalse);
+      expect(storage.saved, isEmpty);
+      expect(state.bans, isEmpty);
+    });
+
+    test('a forgotten ban lifts to the empty string, not to null', () {
+      // Null means "no such ban"; empty means "lifted, and this run never
+      // knew whose it was". The admin screen shows different things for the
+      // two, so they must not be the same answer.
+      final state = ModerationState(storage: InMemoryBanStorage({session}));
+
+      expect(
+        state.unbanByHandle(ModerationState.banHandleFor(session)),
+        isEmpty,
+      );
+      expect(state.isBanned(session), isFalse);
+    });
+
+    test('a handle nobody answers to lifts nothing', () {
+      final state = ModerationState(storage: InMemoryBanStorage({session}));
+
+      expect(state.unbanByHandle('0123456789abcdef'), isNull);
+      expect(state.isBanned(session), isTrue);
+    });
+
+    test('a lifted ban forgets the name with it', () {
+      // Otherwise a re-ban of the same session would show the name they had
+      // the *first* time, which may be exactly the name that got them
+      // removed and then changed.
+      final state = ModerationState(storage: InMemoryBanStorage())
+        ..ban(session, name: 'Rude')
+        ..unban(session)
+        ..ban(session);
+
+      expect(state.bans.single.name, isEmpty);
+    });
+  });
+
   group('ModerationState kick cooldown', () {
     final session = 'f' * 32;
 

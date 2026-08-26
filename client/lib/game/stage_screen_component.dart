@@ -1,5 +1,6 @@
 import 'dart:ui';
 
+import 'package:client/core/app_fonts.dart';
 import 'package:client/game/world_layout.dart';
 import 'package:flame/components.dart';
 
@@ -229,6 +230,7 @@ class StageScreenComponent extends PositionComponent {
         final builder =
             ParagraphBuilder(
                 ParagraphStyle(
+                  fontFamily: AppFonts.text,
                   fontSize: fontSize,
                   fontWeight: FontWeight.w700,
                   textAlign: TextAlign.center,

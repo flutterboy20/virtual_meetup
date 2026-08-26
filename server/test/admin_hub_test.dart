@@ -26,6 +26,10 @@ class FakeConnection implements PlayerConnection {
   List<AdminPlayerListMessage> get lists =>
       received.whereType<AdminPlayerListMessage>().toList(growable: false);
 
+  /// The ban lists this socket was sent, in order.
+  List<AdminBanListMessage> get banLists =>
+      received.whereType<AdminBanListMessage>().toList(growable: false);
+
   /// The action results this socket was sent, in order.
   List<AdminActionResultMessage> get results =>
       received.whereType<AdminActionResultMessage>().toList(growable: false);
@@ -545,6 +549,154 @@ void main() {
     });
   });
 
+  group('the ban list', () {
+    test('an authenticated moderator is handed it immediately', () {
+      // A tab that reads "nobody is banned" until the first timer tick is a
+      // tab that has lied.
+      final it = world();
+
+      final moderator = admin(it.hub);
+
+      expect(moderator.socket.banLists, isNotEmpty);
+      expect(moderator.socket.banLists.last.bans, isEmpty);
+    });
+
+    test('a ban shows up on it without waiting for the timer', () {
+      final it = world();
+      final target = join(it.relay, sessionId: 'a' * 32, name: 'Rude');
+      final moderator = admin(it.hub);
+
+      moderator.session.handleData(
+        encodeMessage(AdminBanMessage(playerId: target.id)),
+      );
+
+      final ban = moderator.socket.banLists.last.bans.single;
+      expect(ban.name, equals('Rude'));
+      expect(ban.isRemembered, isTrue);
+    });
+
+    test('never carries the session id it is about', () {
+      // The rule `AdminPlayerSummary` already follows: a session id is a
+      // bearer token and does not leave the server, trusted admin or not.
+      final it = world();
+      final target = join(it.relay, sessionId: 'a' * 32, name: 'Rude');
+      final moderator = admin(it.hub);
+
+      moderator.session.handleData(
+        encodeMessage(AdminBanMessage(playerId: target.id)),
+      );
+
+      expect(moderator.socket.sent.join(), isNot(contains('a' * 32)));
+    });
+
+    test('an unauthorised socket cannot lift a ban', () {
+      final it = world();
+      final target = join(it.relay, sessionId: 'a' * 32, name: 'Rude');
+      admin(it.hub).session.handleData(
+        encodeMessage(AdminBanMessage(playerId: target.id)),
+      );
+      // Opened but never authenticated.
+      final strangerSocket = FakeConnection();
+      it.hub
+          .open(strangerSocket)
+          .handleData(
+            encodeMessage(
+              AdminUnbanMessage(
+                banId: ModerationState.banHandleFor('a' * 32),
+              ),
+            ),
+          );
+
+      expect(it.relays.moderation.isBanned('a' * 32), isTrue);
+      expect(
+        strangerSocket.received.whereType<AdminErrorMessage>().last.reason,
+        equals(AdminError.unauthorized),
+      );
+    });
+
+    test('lifting one lets them back in', () {
+      final it = world();
+      final target = join(it.relay, sessionId: 'a' * 32, name: 'Rude');
+      final moderator = admin(it.hub);
+      moderator.session.handleData(
+        encodeMessage(AdminBanMessage(playerId: target.id)),
+      );
+
+      moderator.session.handleData(
+        encodeMessage(
+          AdminUnbanMessage(
+            banId: ModerationState.banHandleFor('a' * 32),
+          ),
+        ),
+      );
+
+      expect(it.relays.moderation.isBanned('a' * 32), isFalse);
+      expect(moderator.socket.banLists.last.bans, isEmpty);
+      expect(
+        moderator.socket.results.last.action,
+        equals(AdminAction.unban),
+      );
+      expect(moderator.socket.results.last.targetName, equals('Rude'));
+    });
+
+    test('and they really can rejoin afterwards', () {
+      final it = world();
+      final target = join(it.relay, sessionId: 'a' * 32, name: 'Rude');
+      final moderator = admin(it.hub);
+      moderator.session.handleData(
+        encodeMessage(AdminBanMessage(playerId: target.id)),
+      );
+      moderator.session.handleData(
+        encodeMessage(
+          AdminUnbanMessage(
+            banId: ModerationState.banHandleFor('a' * 32),
+          ),
+        ),
+      );
+
+      final back = join(it.relay, sessionId: 'a' * 32, name: 'Rude');
+
+      expect(it.relay.registry[back.id], isNotNull);
+    });
+
+    test('a handle nobody answers to is a stale row, not a crash', () {
+      final it = world();
+      final moderator = admin(it.hub);
+
+      moderator.session.handleData(
+        encodeMessage(const AdminUnbanMessage(banId: '0123456789abcdef')),
+      );
+
+      expect(
+        moderator.socket.received.whereType<AdminErrorMessage>().last.reason,
+        equals(AdminError.unknownPlayer),
+      );
+      expect(moderator.socket.results, isEmpty);
+    });
+
+    test('lifting one is written to the audit log', () {
+      final it = world();
+      final target = join(it.relay, sessionId: 'a' * 32, name: 'Rude');
+      final moderator = admin(it.hub);
+      moderator.session.handleData(
+        encodeMessage(AdminBanMessage(playerId: target.id)),
+      );
+
+      moderator.session.handleData(
+        encodeMessage(
+          AdminUnbanMessage(
+            banId: ModerationState.banHandleFor('a' * 32),
+          ),
+        ),
+      );
+
+      expect(
+        it.log.where((line) => line.contains('audit:')).last,
+        contains('unban'),
+      );
+    });
+  });
+
   group('mute name', () {
     test('replaces the name without disconnecting them', () {
       final it = world();
@@ -584,8 +736,9 @@ void main() {
       );
       it.relay.tick();
 
-      // Re-announced as an appearance, because metadata only ever travels on
-      // appearance — there is no "player updated" message and deliberately so.
+      // Re-announced as an appearance as well as stated outright, because
+      // metadata otherwise only travels on appearance. The re-appearance is
+      // the belt to `PlayerRenamedMessage`'s braces — see the test below.
       expect(
         onlooker.socket.received
             .whereType<SnapshotMessage>()
@@ -593,6 +746,91 @@ void main() {
             .last
             .name,
         equals(mutedDisplayName),
+      );
+    });
+
+    test('is stated outright to the neighbours, without waiting a tick', () {
+      final it = world();
+      final onlooker = join(it.relay, sessionId: '9' * 32, name: 'Bob');
+      final target = join(it.relay, sessionId: 'a' * 32, name: 'Rude');
+      it.relay.tick();
+
+      admin(it.hub).session.handleData(
+        encodeMessage(AdminMuteNameMessage(playerId: target.id, muted: true)),
+      );
+
+      // No tick between the mute and this expectation on purpose. The
+      // re-appearance path needs one and the interest cap can drop a player
+      // it has just been told is a stranger, which in a packed atrium is
+      // exactly when a mute has to land.
+      final renamed = onlooker.socket.received
+          .whereType<PlayerRenamedMessage>()
+          .single;
+      expect(renamed.id, equals(target.id));
+      expect(renamed.name, equals(mutedDisplayName));
+    });
+
+    test('is stated to the muted player themselves', () {
+      // The half a re-appearance can never cover: your own bean is never in
+      // your own snapshot, so without this a muted person goes on reading
+      // their own name over their own head.
+      final it = world();
+      final target = join(it.relay, sessionId: 'a' * 32, name: 'Rude');
+
+      admin(it.hub).session.handleData(
+        encodeMessage(AdminMuteNameMessage(playerId: target.id, muted: true)),
+      );
+
+      expect(
+        target.socket.received.whereType<PlayerRenamedMessage>().single.name,
+        equals(mutedDisplayName),
+      );
+    });
+
+    test('an unmute is stated the same way, with the chosen name', () {
+      final it = world();
+      final target = join(it.relay, sessionId: 'a' * 32, name: 'Rude');
+      final moderator = admin(it.hub);
+      moderator.session.handleData(
+        encodeMessage(AdminMuteNameMessage(playerId: target.id, muted: true)),
+      );
+
+      moderator.session.handleData(
+        encodeMessage(AdminMuteNameMessage(playerId: target.id, muted: false)),
+      );
+
+      expect(
+        target.socket.received.whereType<PlayerRenamedMessage>().last.name,
+        equals('Rude'),
+      );
+    });
+
+    test('a muted player is told again when they come back', () {
+      // A fresh socket knows nothing, and the welcome is only an id. Without
+      // this the placeholder would be over their bean on every screen except
+      // the one belonging to the person wearing it.
+      final it = world();
+      final target = join(it.relay, sessionId: 'a' * 32, name: 'Rude');
+      admin(it.hub).session.handleData(
+        encodeMessage(AdminMuteNameMessage(playerId: target.id, muted: true)),
+      );
+
+      final again = join(it.relay, sessionId: 'a' * 32, name: 'Rude');
+
+      expect(
+        again.socket.received.whereType<PlayerRenamedMessage>().single.name,
+        equals(mutedDisplayName),
+      );
+    });
+
+    test('an ordinary arrival is told nothing of the sort', () {
+      final it = world();
+
+      final arrival = join(it.relay, sessionId: 'b' * 32);
+
+      expect(
+        arrival.socket.received.whereType<PlayerRenamedMessage>(),
+        isEmpty,
       );
     });
 
@@ -940,6 +1178,80 @@ void main() {
       expect(
         admin1.socket.results.last.action,
         equals(AdminAction.maintenanceOn),
+      );
+    });
+
+    test('the notice and the clock flag travel with the moment', () {
+      final it = world();
+      final admin1 = admin(it.hub);
+
+      admin1.session.handleData(
+        encodeMessage(
+          AdminSetMaintenanceMessage(
+            token: token,
+            until: until,
+            message: 'The keynote overran.',
+            showTimer: false,
+          ),
+        ),
+      );
+
+      expect(
+        it.relays.config.config.maintenanceMessage,
+        equals('The keynote overran.'),
+      );
+      expect(it.relays.config.config.maintenanceShowTimer, isFalse);
+    });
+
+    test('reopening clears the notice it was closed with', () {
+      // A sentence written for one window, still on screen during the next
+      // one, would be shown unchanged and wrong to whoever it catches.
+      final it = world();
+      final admin1 = admin(it.hub);
+      admin1.session.handleData(
+        encodeMessage(
+          AdminSetMaintenanceMessage(
+            token: token,
+            until: until,
+            message: 'The keynote overran.',
+            showTimer: false,
+          ),
+        ),
+      );
+
+      admin1.session.handleData(
+        encodeMessage(const AdminSetMaintenanceMessage(token: token)),
+      );
+
+      expect(it.relays.config.config.maintenanceMessage, isEmpty);
+      expect(it.relays.config.config.maintenanceShowTimer, isTrue);
+    });
+
+    test('a refused change leaves the notice alone', () {
+      final it = world();
+      final admin1 = admin(it.hub);
+      admin1.session.handleData(
+        encodeMessage(
+          AdminSetMaintenanceMessage(
+            token: token,
+            until: until,
+            message: 'The keynote overran.',
+          ),
+        ),
+      );
+
+      admin1.session.handleData(
+        encodeMessage(
+          const AdminSetMaintenanceMessage(
+            token: 'the-wrong-token-entirely',
+            message: 'nonsense',
+          ),
+        ),
+      );
+
+      expect(
+        it.relays.config.config.maintenanceMessage,
+        equals('The keynote overran.'),
       );
     });
 

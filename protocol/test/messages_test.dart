@@ -67,6 +67,8 @@ void main() {
     const BoardMessage(hasBoard: false),
     const PlayerBoardMessage(id: 'p1', hasBoard: true),
     const PlayerBoardMessage(id: 'p2', hasBoard: false),
+    const PlayerRenamedMessage(id: 'p1', name: 'Guest'),
+    const PlayerRenamedMessage(id: 'p2', name: 'Bob'),
     const WorldStatsMessage(online: 0),
     const WorldStatsMessage(online: 217),
     const UnknownMessage(reason: 'unknown message type', rawType: 'confetti'),
@@ -100,6 +102,20 @@ void main() {
     const AdminPlayerListMessage(players: [], online: 0),
     const AdminKickMessage(playerId: 'p1'),
     const AdminBanMessage(playerId: 'p1'),
+    const AdminUnbanMessage(banId: '0123456789abcdef'),
+    const AdminBanListMessage(bans: []),
+    AdminBanListMessage(
+      bans: [
+        // One this run still remembers, and one it does not — the two states
+        // a ban row can be in, both on the wire.
+        BannedSession(
+          id: '0123456789abcdef',
+          name: 'Rude',
+          bannedAt: DateTime.utc(2026, 8, 22, 18, 30),
+        ),
+        const BannedSession(id: 'fedcba9876543210'),
+      ],
+    ),
     const AdminMuteNameMessage(playerId: 'p1', muted: true),
     const AdminMuteNameMessage(playerId: 'p1', muted: false),
     const AdminActionResultMessage(
@@ -143,6 +159,18 @@ void main() {
     AdminSetMaintenanceMessage(
       token: 'a-long-enough-test-token',
       until: DateTime.utc(2026, 8, 22, 18, 30),
+    ),
+    AdminSetMaintenanceMessage(
+      token: 'a-long-enough-test-token',
+      until: DateTime.utc(2026, 8, 22, 18, 30),
+      message: 'The keynote overran. Back in twenty minutes.',
+      showTimer: false,
+    ),
+    // Reopening with something to say, which is the case the early return in
+    // the reader would drop if it read the moment before the sentence.
+    const AdminSetMaintenanceMessage(
+      token: 'a-long-enough-test-token',
+      message: 'We are back.',
     ),
   ];
 

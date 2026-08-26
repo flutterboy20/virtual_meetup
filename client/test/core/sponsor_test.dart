@@ -117,6 +117,69 @@ void main() {
   });
 
   group('the repository', () {
+    /// A config holding one booth, written the way a moderator would.
+    AppConfig configWith(String id) => parseAppConfig(
+      '{"sponsors": [{"id": "$id", "name": "From config", "x": 1100, '
+      '"y": 478, "color": "#54C5F8"}]}',
+    );
+
+    test('the config one prefers the booths a moderator pushed', () async {
+      const bundled = Sponsor(
+        id: 'bundled',
+        name: 'Bundled',
+        blurb: '',
+        x: 1,
+        y: 2,
+        color: Color(0xFF000000),
+      );
+
+      final sponsors = await ConfigSponsorRepository(
+        configWith('pushed'),
+        fallback: const StaticSponsorRepository([bundled]),
+      ).load();
+
+      expect(sponsors.map((sponsor) => sponsor.id), equals(['pushed']));
+      expect(sponsors.single.name, equals('From config'));
+    });
+
+    test(
+      'the config one falls back whole when no booths were pushed',
+      () async {
+        // Every config until somebody writes a sponsor list. An empty east arm
+        // on event morning is a much worse answer than a booth a build old.
+        const bundled = Sponsor(
+          id: 'bundled',
+          name: 'Bundled',
+          blurb: '',
+          x: 1,
+          y: 2,
+          color: Color(0xFF000000),
+        );
+
+        final sponsors = await const ConfigSponsorRepository(
+          AppConfig.defaults,
+          fallback: StaticSponsorRepository([bundled]),
+        ).load();
+
+        expect(sponsors, equals([bundled]));
+      },
+    );
+
+    test(
+      'a booth typed wrong in the document fails as loudly as in the file',
+      () {
+        final config = parseAppConfig('{"sponsors": [{"name": "no id"}]}');
+
+        expect(
+          () => ConfigSponsorRepository(
+            config,
+            fallback: const StaticSponsorRepository([]),
+          ).load(),
+          throwsFormatException,
+        );
+      },
+    );
+
     test('the static one answers with what it was given', () async {
       const sponsor = Sponsor(
         id: 'a',
@@ -130,6 +193,100 @@ void main() {
       expect(
         await const StaticSponsorRepository([sponsor]).load(),
         equals([sponsor]),
+      );
+    });
+  });
+
+  group('equality', () {
+    const acme = Sponsor(
+      id: 'acme',
+      name: 'Acme',
+      blurb: 'a booth',
+      x: 1130,
+      y: 478,
+      color: Color(0xFF54C5F8),
+    );
+
+    test('two booths with every field the same are the same booth', () {
+      expect(
+        acme,
+        equals(
+          const Sponsor(
+            id: 'acme',
+            name: 'Acme',
+            blurb: 'a booth',
+            x: 1130,
+            y: 478,
+            color: Color(0xFF54C5F8),
+          ),
+        ),
+      );
+    });
+
+    test('a rename is a different booth, not the same one', () {
+      // It used to be equality by id alone, and this is the case that made
+      // that wrong: everything downstream compares booth lists to decide
+      // whether the room has to change, so under id-only equality a rename
+      // reached the config and never reached the sign.
+      expect(
+        acme,
+        isNot(
+          equals(
+            const Sponsor(
+              id: 'acme',
+              name: 'Acme Industries',
+              blurb: 'a booth',
+              x: 1130,
+              y: 478,
+              color: Color(0xFF54C5F8),
+            ),
+          ),
+        ),
+      );
+    });
+
+    test('so is a move, and so is a repaint', () {
+      expect(
+        acme,
+        isNot(
+          equals(
+            const Sponsor(
+              id: 'acme',
+              name: 'Acme',
+              blurb: 'a booth',
+              x: 1330,
+              y: 478,
+              color: Color(0xFF54C5F8),
+            ),
+          ),
+        ),
+      );
+      expect(
+        acme,
+        isNot(
+          equals(
+            const Sponsor(
+              id: 'acme',
+              name: 'Acme',
+              blurb: 'a booth',
+              x: 1130,
+              y: 478,
+              color: Color(0xFF7ED9B6),
+            ),
+          ),
+        ),
+      );
+    });
+
+    test('duplicate ids are still refused, by id', () {
+      // The identity reading did not go away; it moved to the one place that
+      // wants it, and it compares id strings rather than whole booths.
+      expect(
+        () => readSponsors(const [
+          {'id': 'a', 'name': 'One', 'x': 1, 'y': 1, 'color': '#FFFFFF'},
+          {'id': 'a', 'name': 'Two', 'x': 2, 'y': 2, 'color': '#FFFFFF'},
+        ]),
+        throwsFormatException,
       );
     });
   });

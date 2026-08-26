@@ -40,7 +40,14 @@ enum AdminAction {
   maintenanceOn('maintenanceOn'),
 
   /// Open it again, before the stated moment has arrived.
-  maintenanceOff('maintenanceOff');
+  maintenanceOff('maintenanceOff'),
+
+  /// Take a ban off, letting somebody back in.
+  ///
+  /// The only action here that names a **ban** rather than a player: by the
+  /// time it is taken the person is not in the world, which is the whole
+  /// point of the ban being on.
+  unban('unban');
 
   const AdminAction(this.wireName);
 
@@ -84,6 +91,69 @@ enum AdminError {
     }
     return AdminError.badRequest;
   }
+}
+
+/// One row of the admin's ban list.
+///
+/// Deliberately **not** carrying the session id, exactly like
+/// [AdminPlayerSummary]. A session id is a bearer token — anybody holding one
+/// can walk into that player's bean — so it does not leave the server even to
+/// an admin who is already trusted. [id] here is a one-way handle derived
+/// from it: stable across restarts, so a ban loaded from disk can still be
+/// lifted, and useless to anybody who obtains it.
+@immutable
+class BannedSession {
+  /// Creates a ban row.
+  const BannedSession({required this.id, this.name = '', this.bannedAt});
+
+  /// Reads a ban row from its JSON form.
+  factory BannedSession.fromJson(Map<String, Object?> json) => BannedSession(
+    id: readString(json, 'id'),
+    // Absent reads as "we no longer know", which is a real state: see [name].
+    name: json['name'] is String ? json['name']! as String : '',
+    bannedAt: DateTime.tryParse(
+      json['bannedAt'] is String ? json['bannedAt']! as String : '',
+    )?.toUtc(),
+  );
+
+  /// The handle this ban is lifted by. Not the session id; see the class doc.
+  final String id;
+
+  /// The name they were banned under, or `''` if this server no longer knows.
+  ///
+  /// Empty is the normal state for a ban that was made **before the current
+  /// process started**. The ban list on disk holds ids and nothing else, on
+  /// purpose: a file of the names people were removed for is a document
+  /// somebody then has to own, and it would outlive the event that needed it.
+  /// Names are held in memory for the run that took the ban, which is the run
+  /// in which somebody is going to change their mind about it.
+  final String name;
+
+  /// When the ban was taken, or `null` if this server no longer knows.
+  final DateTime? bannedAt;
+
+  /// Whether this server still remembers who this ban was for.
+  bool get isRemembered => name.isNotEmpty;
+
+  /// Returns the JSON form of this row.
+  Map<String, Object?> toJson() => {
+    'id': id,
+    'name': name,
+    'bannedAt': bannedAt?.toUtc().toIso8601String(),
+  };
+
+  @override
+  bool operator ==(Object other) =>
+      other is BannedSession &&
+      other.id == id &&
+      other.name == name &&
+      other.bannedAt == bannedAt;
+
+  @override
+  int get hashCode => Object.hash(id, name, bannedAt);
+
+  @override
+  String toString() => 'BannedSession($id, ${isRemembered ? name : "unknown"})';
 }
 
 /// One row of the admin's live player list.

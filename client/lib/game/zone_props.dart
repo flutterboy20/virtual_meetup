@@ -1,6 +1,7 @@
 import 'dart:math' as math;
 import 'dart:ui';
 
+import 'package:client/core/app_fonts.dart';
 import 'package:client/core/sponsor.dart';
 import 'package:client/core/world_palette.dart';
 import 'package:client/game/world_layout.dart';
@@ -697,6 +698,7 @@ abstract final class ZoneProps {
     final builder =
         ParagraphBuilder(
             ParagraphStyle(
+              fontFamily: AppFonts.text,
               fontSize: 15,
               fontWeight: FontWeight.w700,
               textAlign: TextAlign.center,
@@ -1039,6 +1041,7 @@ abstract final class ZoneProps {
     final builder =
         ParagraphBuilder(
             ParagraphStyle(
+              fontFamily: AppFonts.text,
               fontSize: 15,
               fontWeight: FontWeight.w800,
               textAlign: TextAlign.center,

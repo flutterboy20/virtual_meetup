@@ -2,6 +2,7 @@ import 'dart:convert';
 
 import 'package:client/core/sponsor.dart';
 import 'package:flutter/services.dart' show AssetBundle, rootBundle;
+import 'package:protocol/protocol.dart';
 
 /// Where the sponsor list comes from.
 ///
@@ -42,6 +43,40 @@ class AssetSponsorRepository implements SponsorRepository {
   }
 }
 
+/// Reads the booth list out of the event config a moderator pushed.
+///
+/// The booths were bundled first and are config now, for the reason the
+/// blurbs above predicted: a sponsor list changes late, and "edit the JSON,
+/// rebuild, redeploy" is not a thing anybody does at nine in the morning on
+/// event day. A moderator pastes the booths into the admin document and every
+/// world built after that has them.
+///
+/// **Falls back whole.** A config with no `sponsors` key — which is every
+/// config until somebody writes one — hands the question to [fallback], the
+/// bundled file. That is what keeps the app shipping with a working east arm
+/// instead of an empty one, and what keeps the offline promise the asset
+/// repository was built for.
+class ConfigSponsorRepository implements SponsorRepository {
+  /// Creates a repository over [config], falling back to the bundled file.
+  const ConfigSponsorRepository(
+    this.config, {
+    this.fallback = const AssetSponsorRepository(),
+  });
+
+  /// The config to read booths out of.
+  final AppConfig config;
+
+  /// Where the booths come from when [config] names none.
+  final SponsorRepository fallback;
+
+  @override
+  Future<List<Sponsor>> load() async {
+    final entries = config.sponsors;
+    if (entries.isEmpty) return fallback.load();
+    return readSponsors(entries);
+  }
+}
+
 /// A repository that always answers with [sponsors]. For tests and previews.
 class StaticSponsorRepository implements SponsorRepository {
   /// Creates a repository over a fixed list.
@@ -73,6 +108,18 @@ List<Sponsor> parseSponsors(String raw) {
     throw const FormatException('sponsors.json needs a "sponsors" list');
   }
 
+  return readSponsors(entries);
+}
+
+/// Turns already-decoded booth entries into [Sponsor]s.
+///
+/// Split out of [parseSponsors] because the booths now arrive two ways — as
+/// the text of a bundled file, and as a list that has already been through
+/// `AppConfig` — and the rules about what a booth *is* must not be written
+/// twice. Throws the same [FormatException]s either way, so a booth typed
+/// wrong into the admin document fails as loudly as one typed wrong into the
+/// asset.
+List<Sponsor> readSponsors(List<Object?> entries) {
   final sponsors = <Sponsor>[];
   final seen = <String>{};
   for (final entry in entries) {

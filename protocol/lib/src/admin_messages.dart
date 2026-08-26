@@ -263,6 +263,96 @@ class AdminBanMessage extends ProtocolMessage {
   String toString() => 'AdminBanMessage($playerId)';
 }
 
+/// Server to admin: every ban currently in force.
+///
+/// Pushed on the same slow timer as the player list, and again the moment a
+/// ban is taken or lifted, so a moderator watching the tab sees their own
+/// action land without tapping anything.
+///
+/// Carries **handles, not session ids** — see [BannedSession]. The list is
+/// short by nature: bans are the rarest thing a moderator does, and an event
+/// with a hundred of them has a problem no tool fixes.
+@immutable
+class AdminBanListMessage extends ProtocolMessage {
+  /// Creates a ban list.
+  const AdminBanListMessage({required this.bans});
+
+  /// Reads a ban list from its JSON form.
+  factory AdminBanListMessage.fromJson(Map<String, Object?> json) =>
+      AdminBanListMessage(
+        bans: readObjectList(
+          json,
+          'bans',
+        ).map(BannedSession.fromJson).toList(growable: false),
+      );
+
+  /// Every ban in force, newest first.
+  final List<BannedSession> bans;
+
+  @override
+  MessageType get type => MessageType.adminBanList;
+
+  @override
+  Map<String, Object?> toJson() => {
+    ...envelope(),
+    'bans': bans.map((ban) => ban.toJson()).toList(growable: false),
+  };
+
+  @override
+  bool operator ==(Object other) {
+    if (other is! AdminBanListMessage) return false;
+    if (other.bans.length != bans.length) return false;
+    for (var i = 0; i < bans.length; i++) {
+      if (other.bans[i] != bans[i]) return false;
+    }
+    return true;
+  }
+
+  @override
+  int get hashCode => Object.hash(type, Object.hashAll(bans));
+
+  @override
+  String toString() => 'AdminBanListMessage(${bans.length} banned)';
+}
+
+/// Admin to server: lift this ban.
+///
+/// Names a **ban handle** rather than a player id, because by the time this
+/// is sent there is no player: the ban is what is left of them. The handle is
+/// one-way — the server maps it back to a session id it never sent out.
+///
+/// No token re-check, unlike closing the event. Unbanning is the *safe*
+/// direction: the cost of a mis-tap is one person back in a party, and the
+/// undo for it is the ban button they were just removed with.
+@immutable
+class AdminUnbanMessage extends ProtocolMessage {
+  /// Creates an unban.
+  const AdminUnbanMessage({required this.banId});
+
+  /// Reads an unban from its JSON form.
+  factory AdminUnbanMessage.fromJson(Map<String, Object?> json) =>
+      AdminUnbanMessage(banId: readString(json, 'banId'));
+
+  /// Which ban to lift, by its handle.
+  final String banId;
+
+  @override
+  MessageType get type => MessageType.adminUnban;
+
+  @override
+  Map<String, Object?> toJson() => {...envelope(), 'banId': banId};
+
+  @override
+  bool operator ==(Object other) =>
+      other is AdminUnbanMessage && other.banId == banId;
+
+  @override
+  int get hashCode => Object.hash(type, banId);
+
+  @override
+  String toString() => 'AdminUnbanMessage($banId)';
+}
+
 /// Admin to server: take this player's name away, or give it back.
 ///
 /// The action the design expects to use most. A bad *name* is the likely
@@ -477,7 +567,12 @@ class AdminSetConfigMessage extends ProtocolMessage {
 @immutable
 class AdminSetMaintenanceMessage extends ProtocolMessage {
   /// Creates a maintenance change.
-  const AdminSetMaintenanceMessage({required this.token, this.until});
+  const AdminSetMaintenanceMessage({
+    required this.token,
+    this.until,
+    this.message = '',
+    this.showTimer = true,
+  });
 
   /// Reads a maintenance change from its JSON form.
   ///
@@ -487,9 +582,18 @@ class AdminSetMaintenanceMessage extends ProtocolMessage {
   /// of what the person tapping the button asked for. An unreadable value
   /// throws, so the message decodes as unknown and is dropped.
   factory AdminSetMaintenanceMessage.fromJson(Map<String, Object?> json) {
+    // Read before the early return, so reopening the event can still carry a
+    // sentence — "we are back, the keynote starts in five" is exactly the
+    // thing somebody wants to say at the moment they open the doors.
+    final message = json['message'];
+    final showTimer = json['showTimer'];
     final raw = json['until'];
     if (raw == null) {
-      return AdminSetMaintenanceMessage(token: readString(json, 'token'));
+      return AdminSetMaintenanceMessage(
+        token: readString(json, 'token'),
+        message: message is String ? message.trim() : '',
+        showTimer: showTimer is! bool || showTimer,
+      );
     }
     if (raw is! String) {
       throw FormatException('"until" must be a string, got ${raw.runtimeType}');
@@ -501,6 +605,8 @@ class AdminSetMaintenanceMessage extends ProtocolMessage {
     return AdminSetMaintenanceMessage(
       token: readString(json, 'token'),
       until: until.toUtc(),
+      message: message is String ? message.trim() : '',
+      showTimer: showTimer is! bool || showTimer,
     );
   }
 
@@ -510,6 +616,23 @@ class AdminSetMaintenanceMessage extends ProtocolMessage {
   /// When the event opens again, or `null` to open it now.
   final DateTime? until;
 
+  /// What to tell the people who are locked out, or `''` for the built-in
+  /// sentence.
+  ///
+  /// Deliberately *not* validated here beyond a trim. This is a sentence a
+  /// human wrote for other humans; the only thing the protocol has an opinion
+  /// about is that it is a string, and the server caps its length the same
+  /// way it caps the config document it ends up inside.
+  final String message;
+
+  /// Whether the pause screen should count down to [until].
+  ///
+  /// Sent alongside the moment rather than left in the config document,
+  /// because it is part of the same decision: a moderator closing the event
+  /// for "about an hour" wants the sentence and not the clock, and having to
+  /// make that choice in two places is how the two end up disagreeing.
+  final bool showTimer;
+
   @override
   MessageType get type => MessageType.adminSetMaintenance;
 
@@ -518,16 +641,20 @@ class AdminSetMaintenanceMessage extends ProtocolMessage {
     ...envelope(),
     'token': token,
     'until': until?.toUtc().toIso8601String(),
+    'message': message,
+    'showTimer': showTimer,
   };
 
   @override
   bool operator ==(Object other) =>
       other is AdminSetMaintenanceMessage &&
       other.token == token &&
-      other.until == until;
+      other.until == until &&
+      other.message == message &&
+      other.showTimer == showTimer;
 
   @override
-  int get hashCode => Object.hash(type, token, until);
+  int get hashCode => Object.hash(type, token, until, message, showTimer);
 
   /// Deliberately does not print the token, like [AdminAuthMessage].
   @override

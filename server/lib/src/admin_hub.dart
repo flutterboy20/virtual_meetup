@@ -181,7 +181,10 @@ class AdminHub {
 
   /// Starts pushing player lists to authorised admins.
   void start() {
-    _listTimer ??= Timer.periodic(listInterval, (_) => broadcastPlayerList());
+    _listTimer ??= Timer.periodic(listInterval, (_) {
+      broadcastPlayerList();
+      broadcastBanList();
+    });
   }
 
   /// Stops pushing player lists. Sockets stay open.
@@ -276,6 +279,22 @@ class AdminHub {
     );
     for (final session in authorized) {
       session._sendRaw(encoded);
+    }
+  }
+
+  /// Sends every authorised admin every ban in force.
+  ///
+  /// Its own broadcast rather than a field on the player list, for the same
+  /// reason the config is: the two answer opposite questions. That one is who
+  /// is *in* the world, and a banned person is by definition not.
+  ///
+  /// Public so tests can step it without a timer, like the list beside it.
+  void broadcastBanList() {
+    final encoded = encodeMessage(
+      AdminBanListMessage(bans: _relays.moderation.bans),
+    );
+    for (final session in _sessions) {
+      if (session.isAuthorized) session._sendRaw(encoded);
     }
   }
 
@@ -467,6 +486,12 @@ class AdminSession {
           message.playerId,
           (id) => _hub._act(id, (relay) => relay.ban(id)),
         );
+        // The list the moderator is looking at just grew a row.
+        _hub.broadcastBanList();
+
+      case AdminUnbanMessage():
+        if (!_requireAuthorized(message)) return;
+        _handleUnban(message);
 
       case AdminSetConfigMessage():
         if (!_requireAuthorized(message)) return;
@@ -498,6 +523,7 @@ class AdminSession {
       case EmoteMessage():
       case BoardMessage():
       case PlayerBoardMessage():
+      case PlayerRenamedMessage():
       case WelcomeMessage():
       case SnapshotMessage():
       case PlayerLeftMessage():
@@ -506,6 +532,7 @@ class AdminSession {
       case WorldStatsMessage():
       case AdminAuthResultMessage():
       case AdminPlayerListMessage():
+      case AdminBanListMessage():
       case AdminActionResultMessage():
       case AdminErrorMessage():
       case ConfigMessage():
@@ -592,7 +619,10 @@ class AdminSession {
       ..broadcastPlayerList()
       // And the config, so the editor opens on what is live rather than on
       // an empty box somebody might mistake for an empty config.
-      ..broadcastConfig();
+      ..broadcastConfig()
+      // And the bans, for the same reason: a tab that reads "nobody is
+      // banned" until the first timer tick is a tab that has lied.
+      ..broadcastBanList();
   }
 
   /// Replaces the event's config, or explains why it did not.
@@ -699,7 +729,11 @@ class AdminSession {
       return;
     }
 
-    final applied = _hub._relays.config.setMaintenanceUntil(until);
+    final applied = _hub._relays.config.setMaintenanceUntil(
+      until,
+      message: message.message,
+      showTimer: message.showTimer,
+    );
     _hub._log(
       until == null
           ? 'an admin reopened the event'
@@ -764,6 +798,47 @@ class AdminSession {
       ),
     );
     return false;
+  }
+
+  /// Lifts a ban and tells the moderator which one went.
+  ///
+  /// Not routed through [_report] like the other three, because those all
+  /// name a player who has to be *found* — and the whole point of a ban is
+  /// that there is no player to find. The failure here is a different one: a
+  /// row tapped a second after somebody else lifted it.
+  ///
+  /// No token re-check. Unbanning is the safe direction, and a dialog in
+  /// front of a fix is a dialog somebody has to read while a room waits — the
+  /// same argument the reopen path already makes.
+  void _handleUnban(AdminUnbanMessage message) {
+    final name = _hub._relays.moderation.unbanByHandle(message.banId);
+    if (name == null) {
+      _send(
+        const AdminErrorMessage(
+          reason: AdminError.unknownPlayer,
+          detail: 'That ban is no longer on the list.',
+        ),
+      );
+      return;
+    }
+
+    // The handle stands in for the target here. It is the only name this
+    // action ever had — a lifted ban whose owner this run has forgotten is
+    // still a real thing that happened, and the log has to be able to say so.
+    final target = name.isEmpty ? message.banId : name;
+    _hub._relays.audit.record(
+      action: AdminAction.unban,
+      targetId: message.banId,
+      targetName: target,
+    );
+    _send(
+      AdminActionResultMessage(
+        action: AdminAction.unban,
+        targetId: message.banId,
+        targetName: target,
+      ),
+    );
+    _hub.broadcastBanList();
   }
 
   /// Runs [act] against [playerId] and answers with a result or an error.

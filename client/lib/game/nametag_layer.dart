@@ -1,5 +1,6 @@
 import 'dart:ui';
 
+import 'package:client/core/app_fonts.dart';
 import 'package:client/game/bean_component.dart';
 import 'package:client/game/bot_component.dart';
 import 'package:client/game/floor_component.dart';
@@ -92,7 +93,13 @@ class NametagLayer extends Component {
   final BeanComponent? localBean;
 
   /// The name to draw over [localBean].
-  final String localName;
+  ///
+  /// Mutable, alone among this layer's fields, because it is the one that a
+  /// moderator can change while the game is running: a muted player has to
+  /// see the placeholder over their own head, or they cannot tell a mute from
+  /// a bug. Written by `ConferenceGame` when a rename arrives; read fresh
+  /// every frame, so no rebuild is needed.
+  String localName;
 
   /// The beans standing around who are not players.
   ///
@@ -307,6 +314,7 @@ class _Tag {
       final builder =
           ParagraphBuilder(
               ParagraphStyle(
+                fontFamily: AppFonts.text,
                 fontSize: 13,
                 fontWeight: FontWeight.w700,
                 textAlign: TextAlign.center,

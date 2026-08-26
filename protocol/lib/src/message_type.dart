@@ -70,6 +70,15 @@ enum MessageType {
   /// it without anybody re-announcing anything.
   playerBoard('playerBoard'),
 
+  /// Server → client: somebody's displayed name changed under them.
+  ///
+  /// Only a moderator can cause this — a player cannot rename themselves
+  /// without rejoining — so it is rare enough to be an event rather than a
+  /// field that rides on every snapshot. Sent to everybody who can see them
+  /// *and* to the person it happened to, which is the half a re-appearance
+  /// could never cover: your own bean is never in your own snapshot.
+  playerRenamed('playerRenamed'),
+
   /// Server → client: how the world as a whole is doing, about once a second.
   ///
   /// Separate from a snapshot because the two answer different questions at
@@ -114,6 +123,18 @@ enum MessageType {
 
   /// Admin → server: disconnect this player and refuse their session.
   adminBan('admin.ban'),
+
+  /// Server → admin: every ban currently in force, on a slow timer.
+  ///
+  /// Its own message rather than a field on [adminPlayerList], because the
+  /// two answer opposite questions: that one is who is *in* the world, and a
+  /// banned person is by definition not.
+  adminBanList('admin.bans'),
+
+  /// Admin → server: lift this ban.
+  ///
+  /// Names a **ban handle**, never a session id. See `BannedSession`.
+  adminUnban('admin.unban'),
 
   /// Admin → server: replace this player's name, or give it back.
   adminMuteName('admin.muteName'),

@@ -1,6 +1,7 @@
 import 'dart:math' as math;
 import 'dart:ui';
 
+import 'package:client/core/app_fonts.dart';
 import 'package:client/game/beach_props.dart';
 import 'package:client/game/bean_animation.dart';
 import 'package:client/game/bean_appearance.dart';
@@ -144,6 +145,7 @@ class HintBeanComponent extends Component {
     final builder =
         ParagraphBuilder(
             ParagraphStyle(
+              fontFamily: AppFonts.text,
               fontSize: 19,
               fontWeight: FontWeight.w900,
               textAlign: TextAlign.center,

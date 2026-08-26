@@ -1,6 +1,7 @@
 import 'dart:math' as math;
 import 'dart:ui';
 
+import 'package:client/core/app_fonts.dart';
 import 'package:client/core/world_palette.dart';
 import 'package:client/game/beach_layout.dart';
 import 'package:protocol/protocol.dart';
@@ -590,6 +591,7 @@ abstract final class BeachProps {
     final builder =
         ParagraphBuilder(
             ParagraphStyle(
+              fontFamily: AppFonts.text,
               fontSize: 22,
               fontWeight: FontWeight.w800,
               textAlign: TextAlign.center,

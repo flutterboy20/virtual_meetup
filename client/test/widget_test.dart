@@ -1,5 +1,7 @@
 import 'package:client/app/app.dart';
+import 'package:client/core/credits.dart';
 import 'package:client/core/player_identity.dart';
+import 'package:client/core/share_link.dart';
 import 'package:client/core/sponsor.dart';
 import 'package:client/features/setup/view/setup_screen.dart';
 import 'package:client/features/welcome/view/welcome_screen.dart';
@@ -100,6 +102,25 @@ void main() {
       // The Join button is still there. The count decorates the door, it
       // does not gate it.
       expect(find.text('Join'), findsOneWidget);
+    });
+
+    testWidgets('offers the link before anybody has walked in', (tester) async {
+      // The front door is where sharing happens: people pass this on while
+      // they are still deciding who else should be here.
+      final realSheet = shareSheet;
+      addTearDown(() => shareSheet = realSheet);
+      final shared = <String>[];
+      shareSheet = (text) async => shared.add(text);
+
+      await pumpApp(tester);
+
+      expect(find.text('Share this world'), findsOneWidget);
+
+      await tester.tap(find.text('Share this world'));
+      await tester.pump();
+
+      expect(shared, hasLength(1));
+      expect(shared.single, contains(AppConfig.defaultWorldName));
     });
 
     testWidgets('Join sends a new player to setup', (tester) async {
@@ -284,11 +305,10 @@ void main() {
       expect(find.text('Please pick a different name.'), findsOneWidget);
     });
 
-    testWidgets('a banned join is a dead end, not the setup form', (
-      tester,
-    ) async {
+    testWidgets('a banned join is not the setup form', (tester) async {
       // A form somebody can retype forever, that refuses every attempt, is
-      // the cruellest version of this screen. There is nothing to fix.
+      // the cruellest version of this screen. There is nothing to fix — but
+      // there is somebody to write to, and a door that can be knocked on.
       final socket = await enterWorld(tester);
       await tester.pump();
 
@@ -307,8 +327,45 @@ void main() {
         findsOneWidget,
       );
       expect(find.byType(TextField), findsNothing);
-      // A ban has no way forward, so it must not offer one.
-      expect(find.text('Try again'), findsNothing);
+      // The address to appeal to, and the explanation of what the button
+      // does — because what it does is ask the server, not let itself in.
+      expect(find.text(Credits.supportEmail), findsOneWidget);
+      expect(find.text('Try again'), findsOneWidget);
+      expect(find.textContaining('once the ban is lifted'), findsOneWidget);
+      // Nothing has been asked yet, so there is nothing to report.
+      expect(find.textContaining('Last checked at'), findsNothing);
+    });
+
+    testWidgets('a lifted ban lets them back in without a reload', (
+      tester,
+    ) async {
+      // The whole point. The socket that would have carried the good news
+      // was refused at the door, so before this button an unbanned person
+      // sat on a dead screen until they thought to reload the tab.
+      final socket = await enterWorld(tester);
+      await tester.pump();
+
+      socket.emit(
+        const JoinRejectedMessage(
+          reason: JoinRejection.banned,
+          detail: 'A moderator has removed you from this event.',
+        ),
+      );
+      await tester.pump();
+      await tester.pump();
+      expect(find.byType(WorldScreen), findsNothing);
+
+      // The moderator lifts it, so this join is simply not refused.
+      await tester.tap(find.text('Try again'));
+      await tester.pump();
+      await tester.pump();
+      await tester.pump();
+
+      expect(find.byType(WorldScreen), findsOneWidget);
+      expect(
+        find.text('A moderator has removed you from this event.'),
+        findsNothing,
+      );
     });
 
     testWidgets('a kicked player sets up again from scratch', (tester) async {

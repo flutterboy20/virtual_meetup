@@ -77,6 +77,7 @@ class AdminViewModel extends ChangeNotifier {
   String _search = '';
   MapId? _mapFilter;
   List<AdminPlayerSummary> _players = const [];
+  List<BannedSession> _bans = const [];
   int _online = 0;
   Map<MapId, int> _onlineByMap = const {};
   AppConfig _config = AppConfig.defaults;
@@ -117,6 +118,13 @@ class AdminViewModel extends ChangeNotifier {
 
   /// Everybody in the world, as last reported.
   List<AdminPlayerSummary> get players => List.unmodifiable(_players);
+
+  /// Every ban in force, newest first.
+  ///
+  /// Not filtered by the search box above the player list: that box is for
+  /// finding somebody in a room of two hundred, and a ban list is a handful
+  /// of rows on a screen you open once.
+  List<BannedSession> get bans => List.unmodifiable(_bans);
 
   /// The current search text.
   String get search => _search;
@@ -248,6 +256,12 @@ class AdminViewModel extends ChangeNotifier {
   /// Disconnects [playerId] and blocks their session for the event.
   void ban(String playerId) => _send(AdminBanMessage(playerId: playerId));
 
+  /// Lifts the ban named by [banId], letting that person back in.
+  ///
+  /// A **ban handle**, never a session id — the server never sends one and
+  /// this screen never holds one. See `BannedSession`.
+  void unban(String banId) => _send(AdminUnbanMessage(banId: banId));
+
   /// Takes [playerId]'s name away, or gives it back.
   void setNameMuted(String playerId, {required bool muted}) =>
       _send(AdminMuteNameMessage(playerId: playerId, muted: muted));
@@ -297,6 +311,42 @@ class AdminViewModel extends ChangeNotifier {
     pushConfig(_prettyJson(_config.withBotCounts(counts).toJson()));
   }
 
+  /// The booths the config is currently placing, as raw entries.
+  ///
+  /// Raw rather than parsed `Sponsor`s because `AppConfig` cannot hold a
+  /// `dart:ui` colour and stay the pure-Dart thing the server imports — the
+  /// entries ride as the JSON they were written in. The panel above parses
+  /// them for display and hands them back the same way.
+  ///
+  /// Empty means the world is using the list that shipped in the app, which
+  /// is a different thing from "there are no booths".
+  List<Map<String, Object?>> get sponsors => _config.sponsors;
+
+  /// Replaces the booth list, and pushes it.
+  ///
+  /// Validated here before it goes, unlike [pushConfig] — and the difference
+  /// is worth stating. A document typed into the editor is the moderator's
+  /// text and the server is the only thing entitled to judge it. This is not
+  /// text: it is a list this screen built out of its own fields, and if it is
+  /// malformed then this screen is the thing that is broken. Sending it to be
+  /// refused would report a bug here as a mistake there.
+  ///
+  /// [validate] is the same reader the world uses on these entries, injected
+  /// so the ViewModel does not import the client's `Sponsor` — the layering
+  /// rule that keeps `material.dart` out of here keeps this out too.
+  void setSponsors(
+    List<Map<String, Object?>> entries, {
+    void Function(List<Object?> entries)? validate,
+  }) {
+    try {
+      validate?.call(entries);
+    } on FormatException catch (error) {
+      _fail(error.message);
+      return;
+    }
+    pushConfig(_prettyJson(_config.withSponsors(entries).toJson()));
+  }
+
   /// How many bots [map] is set to show, or `null` for its whole roster.
   int? botCountFor(MapId map) => _config.botCountFor(map);
 
@@ -305,6 +355,13 @@ class AdminViewModel extends ChangeNotifier {
 
   /// Whether the event is currently closed to attendees.
   bool get isUnderMaintenance => _config.isUnderMaintenanceAt(DateTime.now());
+
+  /// What the pause screen is currently telling people, or `''` for the
+  /// built-in sentence.
+  String get maintenanceMessage => _config.maintenanceMessage;
+
+  /// Whether the pause screen is currently counting down.
+  bool get maintenanceShowTimer => _config.maintenanceShowTimer;
 
   /// Closes the event until [until], or reopens it when that is `null`.
   ///
@@ -318,7 +375,22 @@ class AdminViewModel extends ChangeNotifier {
   /// Both refusals here are courtesies to the person tapping, not controls:
   /// the server re-checks the token and re-checks the time, and would refuse
   /// exactly the same two things if these lines were deleted.
-  void setMaintenance({required String token, DateTime? until}) {
+  /// [message] is what the pause screen should say and [showTimer] whether
+  /// it should count down. Both travel with the moment rather than the config
+  /// document, because they are one decision: a window closed for "about an
+  /// hour" wants a sentence and no clock, and splitting that across two
+  /// pushes is how the two end up disagreeing.
+  ///
+  /// Reopening sends the defaults — no sentence, clock back on — which is
+  /// what clears the last closure's notice. A notice that outlived the window
+  /// it was written for would be shown, unchanged and wrong, to whoever the
+  /// *next* closure catches.
+  void setMaintenance({
+    required String token,
+    DateTime? until,
+    String message = '',
+    bool showTimer = true,
+  }) {
     if (token.trim().isEmpty) {
       _fail('Enter the moderation token to confirm.');
       return;
@@ -328,7 +400,12 @@ class AdminViewModel extends ChangeNotifier {
       return;
     }
     _send(
-      AdminSetMaintenanceMessage(token: token.trim(), until: until?.toUtc()),
+      AdminSetMaintenanceMessage(
+        token: token.trim(),
+        until: until?.toUtc(),
+        message: message.trim(),
+        showTimer: showTimer,
+      ),
     );
   }
 
@@ -404,6 +481,10 @@ class AdminViewModel extends ChangeNotifier {
         _onlineByMap = message.onlineByMap;
         _notify();
 
+      case AdminBanListMessage():
+        _bans = message.bans;
+        _notify();
+
       case AdminActionResultMessage():
         _feedback = AdminFeedback(
           _describe(message.action, message.targetName),
@@ -439,11 +520,13 @@ class AdminViewModel extends ChangeNotifier {
       case JoinRejectedMessage():
       case PlayerEmotedMessage():
       case PlayerBoardMessage():
+      case PlayerRenamedMessage():
       case WorldStatsMessage():
       case AdminAuthMessage():
       case AdminKickMessage():
       case AdminBanMessage():
       case AdminMuteNameMessage():
+      case AdminUnbanMessage():
       case AdminSetConfigMessage():
       case AdminSetMaintenanceMessage():
       case UnknownMessage():
@@ -466,6 +549,10 @@ class AdminViewModel extends ChangeNotifier {
       'The event is closed until '
           '${_formatWireMoment(name)}.',
     AdminAction.maintenanceOff => 'The event is open again.',
+    // The handle stands in for the name when this run of the server no
+    // longer remembers whose ban it was — which is every ban it read off
+    // disk. Saying the handle back is honest; inventing a name is not.
+    AdminAction.unban => '$name can come back in.',
   };
 
   /// Formats an ISO-8601 instant that came off the wire, falling back to the

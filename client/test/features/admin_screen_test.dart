@@ -555,11 +555,225 @@ void main() {
       await tester.enterText(editor, '{"worldName":"Held","somethingNew":1}');
       await tester.pump();
 
+      // Scrolled to first: the panel grew a booth editor above the document,
+      // so the button is off the bottom of a phone-sized screen.
+      await tester.ensureVisible(find.widgetWithText(TextButton, 'Tidy'));
+      await tester.pumpAndSettle();
       await tester.tap(find.widgetWithText(TextButton, 'Tidy'));
       await tester.pumpAndSettle();
 
       expect(controllerOf(tester).text, contains('"worldName": "Held"'));
       expect(controllerOf(tester).text, contains('"somethingNew": 1'));
+    });
+  });
+
+  group('the banned tab', () {
+    /// Unlocks the screen, opens the Banned tab and pushes [bans] into it.
+    Future<FakeSocket> openBanTab(
+      WidgetTester tester,
+      List<BannedSession> bans,
+    ) async {
+      final socket = await pumpAdmin(tester);
+      await unlock(tester, socket);
+      await tester.tap(find.text('BANNED'));
+      await tester.pumpAndSettle();
+      socket.emit(AdminBanListMessage(bans: bans));
+      await tester.pumpAndSettle();
+      return socket;
+    }
+
+    testWidgets('says so plainly when nobody is banned', (tester) async {
+      await openBanTab(tester, const []);
+
+      expect(find.text('Nobody is banned.'), findsOneWidget);
+    });
+
+    testWidgets('names a ban this run still remembers', (tester) async {
+      await openBanTab(tester, [
+        BannedSession(
+          id: '0123456789abcdef',
+          name: 'Rude',
+          bannedAt: DateTime.utc(2026, 8, 22, 18, 30),
+        ),
+      ]);
+
+      expect(find.text('Rude'), findsOneWidget);
+      expect(find.textContaining('0123456789abcdef'), findsOneWidget);
+    });
+
+    testWidgets('is honest about one it has forgotten', (tester) async {
+      // A ban read off disk after a restart. Saying nothing would be worse
+      // than saying "I do not know who this was" — the row is still real and
+      // still has to be liftable.
+      await openBanTab(tester, const [
+        BannedSession(id: 'fedcba9876543210'),
+      ]);
+
+      expect(find.text('Banned before the last restart'), findsOneWidget);
+      expect(find.byTooltip('Lift the ban'), findsOneWidget);
+    });
+
+    testWidgets('lifting one asks first, then sends the handle', (
+      tester,
+    ) async {
+      final socket = await openBanTab(tester, [
+        BannedSession(
+          id: '0123456789abcdef',
+          name: 'Rude',
+          bannedAt: DateTime.utc(2026, 8, 22, 18, 30),
+        ),
+      ]);
+
+      await tester.tap(find.byTooltip('Lift the ban'));
+      await tester.pumpAndSettle();
+      // Nothing may go up until the question has been answered.
+      expect(socket.sentMessages.whereType<AdminUnbanMessage>(), isEmpty);
+      expect(find.text('Lift this ban?'), findsOneWidget);
+
+      await tester.tap(find.widgetWithText(FilledButton, 'Lift'));
+      await tester.pumpAndSettle();
+
+      expect(
+        socket.sentMessages.whereType<AdminUnbanMessage>().single.banId,
+        equals('0123456789abcdef'),
+      );
+    });
+
+    testWidgets('cancelling the question sends nothing', (tester) async {
+      final socket = await openBanTab(tester, [
+        BannedSession(
+          id: '0123456789abcdef',
+          name: 'Rude',
+          bannedAt: DateTime.utc(2026, 8, 22, 18, 30),
+        ),
+      ]);
+
+      await tester.tap(find.byTooltip('Lift the ban'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.widgetWithText(TextButton, 'Cancel'));
+      await tester.pumpAndSettle();
+
+      expect(socket.sentMessages.whereType<AdminUnbanMessage>(), isEmpty);
+    });
+
+    testWidgets('says out loud that a ban is not a lock', (tester) async {
+      // A moderator who believes a ban is permanent will not escalate a
+      // problem that has walked back in under a new name.
+      await openBanTab(tester, const [
+        BannedSession(id: 'fedcba9876543210'),
+      ]);
+
+      expect(
+        find.textContaining('Clearing site data'),
+        findsOneWidget,
+      );
+    });
+  });
+
+  group('the booth editor', () {
+    /// Opens the event tab on an unlocked screen holding [booths].
+    Future<FakeSocket> openWithBooths(
+      WidgetTester tester,
+      List<Map<String, Object?>> booths,
+    ) async {
+      final socket = await pumpAdmin(tester);
+      await unlock(tester, socket);
+      await tester.tap(find.text('EVENT'));
+      await tester.pumpAndSettle();
+      socket.emit(ConfigMessage(config: AppConfig(sponsors: booths)));
+      await tester.pumpAndSettle();
+      return socket;
+    }
+
+    const acme = {
+      'id': 'acme',
+      'name': 'Acme',
+      'x': 1130.0,
+      'y': 478.0,
+      'color': '#54C5F8',
+    };
+
+    testWidgets('offers the bundled list when the config names none', (
+      tester,
+    ) async {
+      await openWithBooths(tester, const []);
+
+      expect(find.text('Start from the bundled list'), findsOneWidget);
+      expect(find.text('Add a booth'), findsOneWidget);
+    });
+
+    testWidgets('shows a row per booth, with where it stands', (tester) async {
+      await openWithBooths(tester, const [acme]);
+
+      expect(find.text('Acme'), findsOneWidget);
+      expect(find.textContaining('1130, 478'), findsOneWidget);
+    });
+
+    testWidgets('says a booth cannot be read rather than hiding it', (
+      tester,
+    ) async {
+      // The one person who can fix a broken entry is looking at this screen.
+      await openWithBooths(tester, const [
+        {'id': 'broken'},
+      ]);
+
+      expect(find.textContaining('cannot be read'), findsOneWidget);
+    });
+
+    testWidgets('removing one pushes a document without it', (tester) async {
+      final socket = await openWithBooths(tester, const [acme]);
+
+      await tester.tap(find.byTooltip('Remove'));
+      await tester.pumpAndSettle();
+
+      final sent = socket.sentMessages
+          .whereType<AdminSetConfigMessage>()
+          .single;
+      expect(parseAppConfig(sent.document).sponsors, isEmpty);
+    });
+
+    testWidgets('a booth typed into the dialog lands in the document', (
+      tester,
+    ) async {
+      final socket = await openWithBooths(tester, const []);
+
+      await tester.tap(find.text('Add a booth'));
+      await tester.pumpAndSettle();
+      await tester.enterText(
+        find.widgetWithText(TextField, 'Name'),
+        'Beta Corp',
+      );
+      await tester.enterText(find.widgetWithText(TextField, 'Id'), 'beta');
+      await tester.tap(find.widgetWithText(FilledButton, 'Save'));
+      await tester.pumpAndSettle();
+
+      final sent = socket.sentMessages
+          .whereType<AdminSetConfigMessage>()
+          .single;
+      final booth = parseAppConfig(sent.document).sponsors.single;
+      expect(booth['name'], equals('Beta Corp'));
+      expect(booth['id'], equals('beta'));
+      // The defaults put it in the sponsor row rather than at the origin.
+      expect(booth['x'], equals(1130.0));
+    });
+
+    testWidgets('a booth the world would refuse never leaves the dialog', (
+      tester,
+    ) async {
+      final socket = await openWithBooths(tester, const []);
+
+      await tester.tap(find.text('Add a booth'));
+      await tester.pumpAndSettle();
+      // No id, which is the one thing every booth must have.
+      await tester.enterText(find.widgetWithText(TextField, 'Name'), 'Beta');
+      await tester.tap(find.widgetWithText(FilledButton, 'Save'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Add a booth'), findsWidgets);
+      expect(
+        socket.sentMessages.whereType<AdminSetConfigMessage>(),
+        isEmpty,
+      );
     });
   });
 
@@ -573,8 +787,33 @@ void main() {
     }
 
     /// Scrolls the panel to the bottom, where the card lives.
+    ///
+    /// One drag and one settle, deliberately. `ensureVisible` cannot be used
+    /// here — the card is past the end of a lazy list, so it is not built
+    /// until something scrolls to it — and every extra `pumpAndSettle`
+    /// advances the *fake* clock, while the card below has a timer waiting
+    /// on the end of a maintenance window. A scroll that pumped its way past
+    /// that moment would fire the timer before the wall clock got there.
     Future<void> toCard(WidgetTester tester) async {
-      await tester.drag(find.byType(ListView), const Offset(0, -900));
+      // A config arriving raises a toast, and a toast sits across the bottom
+      // of the screen — which is exactly where the card lands once the panel
+      // is scrolled to its end. Cleared rather than waited out: waiting means
+      // pumping four seconds of *fake* clock past a card that has a timer in
+      // it.
+      tester
+          .state<ScaffoldMessengerState>(find.byType(ScaffoldMessenger))
+          .clearSnackBars();
+      await tester.pumpAndSettle();
+
+      final list = tester.getRect(find.byType(ListView));
+      await tester.dragFrom(
+        // Six pixels in from the left edge. The list pads its children by
+        // sixteen, so this strip is the scrollable itself and nothing else —
+        // in particular it is not the document editor, which is a sixteen-
+        // line scrollable of its own and swallows a drag started over it.
+        Offset(list.left + 6, list.center.dy),
+        const Offset(0, -3000),
+      );
       await tester.pumpAndSettle();
     }
 
@@ -606,6 +845,40 @@ void main() {
         find.textContaining('22 Aug 2031, 18:30'),
         findsOneWidget,
       );
+    });
+
+    testWidgets('opens itself again when the window runs out', (tester) async {
+      // A window ends by the clock. The server just starts letting people in
+      // — nothing is pushed down the socket — so without a timer this card
+      // would keep offering to reopen a door that was already open.
+      final socket = await openEventTab(tester);
+      socket.emit(
+        ConfigMessage(
+          config: AppConfig(
+            maintenanceUntil: DateTime.now().toUtc().add(
+              const Duration(seconds: 1),
+            ),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+      await toCard(tester);
+
+      expect(find.text('Reopen the event now'), findsOneWidget);
+
+      // A real second, then a pumped one. The window is judged against
+      // `DateTime.now()`, which a widget test's fake clock does not move —
+      // so the wait has to be real, and the pump is what lets the card's
+      // timer fire against it.
+      await tester.runAsync(
+        () => Future<void>.delayed(const Duration(milliseconds: 1200)),
+      );
+      await tester.pump(const Duration(seconds: 2));
+      await tester.pump();
+
+      expect(find.text('Close the event for maintenance'), findsOneWidget);
+      expect(find.text('Reopen the event now'), findsNothing);
+      expect(find.textContaining('the event is open again'), findsOneWidget);
     });
 
     testWidgets('closing asks for the token before it sends anything', (

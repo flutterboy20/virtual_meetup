@@ -9,7 +9,6 @@ environment:
 resolution: workspace
 
 dependencies:
-  animated_text_kit: ^4.3.0
   flame: ^1.38.0
   flutter:
     sdk: flutter
@@ -17,6 +16,7 @@ dependencies:
   protocol: ^1.0.0
   provider: ^6.1.5+1
   qr_flutter: ^4.1.0
+  share_plus: ^13.3.0
   shared_preferences: ^2.5.5
   url_launcher: ^6.3.2
   web_socket_channel: ^3.0.3
@@ -32,3 +32,24 @@ flutter:
   uses-material-design: true
   assets:
     - assets/sponsors.json
+    # Shipped with the build, not only kept in the repo: the OFL asks that a
+    # copy of the license travel with the font files themselves.
+    - assets/fonts/OFL-Archivo.txt
+    - assets/fonts/OFL-BricolageGrotesque.txt
+  # Bundled rather than fetched at runtime. This app's whole promise is that
+  # it opens on venue wifi, and a typeface that arrives over the network is a
+  # typeface that arrives after the wordmark has already been drawn in
+  # something else.
+  fonts:
+    - family: Archivo
+      fonts:
+        - asset: assets/fonts/Archivo-Regular.ttf
+          weight: 400
+        - asset: assets/fonts/Archivo-Medium.ttf
+          weight: 500
+        - asset: assets/fonts/Archivo-Bold.ttf
+          weight: 700
+    - family: BricolageGrotesque
+      fonts:
+        - asset: assets/fonts/BricolageGrotesque-ExtraBold.ttf
+          weight: 800

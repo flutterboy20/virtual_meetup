@@ -117,6 +117,17 @@ class RemotePlayers extends Component {
         // somebody this client has no bean for has nowhere to go, and the
         // next appearance carries the flag anyway.
         _players[message.id]?.bean.hasBoard = message.hasBoard;
+      case PlayerRenamedMessage():
+        // A moderator took somebody's name away, or gave it back. Applied
+        // here and nowhere else: the name lives on `_RemoteBean`, and the
+        // nametag layer reads it fresh every frame, so this is the whole of
+        // the change on screen.
+        //
+        // Nothing happens if they are not in view — the same rule as a board
+        // change, and safe for the same reason: the server's snapshot carries
+        // the *current* name on appearance, so walking up to them later shows
+        // the right one without this message.
+        _players[message.id]?.name = message.name;
       case WorldStatsMessage():
         // A world-wide counter is HUD state, not world state. It crosses into
         // the widget layer through a notifier, never through a component.
@@ -138,6 +149,8 @@ class RemotePlayers extends Component {
       case AdminPlayerListMessage():
       case AdminKickMessage():
       case AdminBanMessage():
+      case AdminBanListMessage():
+      case AdminUnbanMessage():
       case AdminMuteNameMessage():
       case AdminActionResultMessage():
       case AdminErrorMessage():

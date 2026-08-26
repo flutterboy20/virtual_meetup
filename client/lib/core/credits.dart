@@ -1,5 +1,6 @@
 import 'package:flutter/foundation.dart' show immutable;
 import 'package:flutter/material.dart' show IconData, Icons;
+import 'package:protocol/protocol.dart' show AppConfig;
 
 /// Who built this, and where the source lives.
 ///
@@ -8,13 +9,22 @@ import 'package:flutter/material.dart' show IconData, Icons;
 /// ship a dead link on a poster somebody scans.
 abstract final class Credits {
   /// The line shown permanently in the corner of the world.
-  static const String builtBy = 'Built by Ruhaan · Flutter Boy';
+  static const String builtBy = 'Built by Ruhaan';
 
   /// The name on the lobby's maker credit.
   static const String author = 'Ruhaan';
 
   /// Where to send somebody who taps the name itself.
   static const String authorUrl = 'https://ruhaan-dev.netlify.app/';
+
+  /// Where somebody a moderator removed is told to write.
+  ///
+  /// **A placeholder.** Deliberately not the maker addresses below: an appeal
+  /// against a moderator decision is event business, and it wants an inbox
+  /// the event team can all read rather than one person's personal mail. The
+  /// real address goes here before the doors open — tracked in
+  /// `.planning/open-questions.md`.
+  static const String supportEmail = 'support@example.com';
 
   /// Every way to reach the author, in the order they are shown.
   ///
@@ -51,16 +61,33 @@ abstract final class Credits {
     ),
   ];
 
-  /// The repository the QR code points at.
+  /// The repository the QR code points at when the config does not say.
   ///
-  /// The single line to edit if the repo moves. It is the whole payload of
-  /// the QR: no shortener, no tracker, no redirect — a URL somebody can read
-  /// off the screen and type by hand is a URL they can trust enough to scan.
-  static const String repositoryUrl =
-      'https://github.com/flutterboy20/virtual_conference';
+  /// The fallback, not the truth: the live value is `AppConfig.githubLink`,
+  /// which a moderator edits, and this is the same string the protocol
+  /// defaults to — read from there rather than typed again, because two
+  /// copies of a URL is two chances to ship a dead link on a poster somebody
+  /// scans.
+  static const String repositoryUrl = AppConfig.defaultGithubLink;
 
-  /// What the QR is labelled as, so scanning it is a choice and not a dare.
-  static const String repositoryLabel = 'github.com/flutterboy20';
+  /// How [url] is printed under the QR, so scanning it is a choice and not a
+  /// dare.
+  ///
+  /// The scheme and any trailing slash come off and nothing else does. A
+  /// label that is a *shortening* of the link rather than a *rewrite* of it
+  /// is one a person can check against the code above it; anything cleverer
+  /// (a domain, a name, an ellipsis) is asking them to trust the label
+  /// instead of the link.
+  static String linkLabel(String url) {
+    final trimmed = url.trim();
+    for (final scheme in const ['https://', 'http://']) {
+      if (trimmed.toLowerCase().startsWith(scheme)) {
+        final rest = trimmed.substring(scheme.length);
+        return rest.endsWith('/') ? rest.substring(0, rest.length - 1) : rest;
+      }
+    }
+    return trimmed;
+  }
 }
 
 /// One way to reach the person who made this.

@@ -1,3 +1,4 @@
+import 'package:client/core/app_fonts.dart';
 import 'package:flutter/material.dart';
 
 /// The one place the app's colours and text styles are decided.
@@ -32,20 +33,51 @@ abstract final class AppTheme {
   static const Color bad = Color(0xFFE39A9A);
 
   /// The app's theme.
+  ///
+  /// Two faces, split by job rather than by size: [AppFonts.display] on the
+  /// three display and three headline slots, [AppFonts.text] on everything
+  /// else. Material's own scale is what decides which is which, so a widget
+  /// asking for `headlineMedium` gets the characterful face without knowing
+  /// there are two of them.
   static ThemeData get dark {
     final scheme = ColorScheme.fromSeed(
       seedColor: seed,
       brightness: Brightness.dark,
     ).copyWith(surface: background);
 
+    final base = Typography.whiteMountainView.apply(
+      fontFamily: AppFonts.text,
+      bodyColor: ink,
+      displayColor: ink,
+    );
+
     return ThemeData(
       colorScheme: scheme,
       scaffoldBackgroundColor: background,
       useMaterial3: true,
-      textTheme: Typography.whiteMountainView.apply(
-        bodyColor: ink,
-        displayColor: ink,
+      // Also set on the theme itself, not only on the text theme: anything
+      // that builds a style from scratch rather than from the scale — a
+      // `TextStyle` written inline, of which this app has plenty — inherits
+      // from here.
+      fontFamily: AppFonts.text,
+      textTheme: base.copyWith(
+        displayLarge: _display(base.displayLarge),
+        displayMedium: _display(base.displayMedium),
+        displaySmall: _display(base.displaySmall),
+        headlineLarge: _display(base.headlineLarge),
+        headlineMedium: _display(base.headlineMedium),
+        headlineSmall: _display(base.headlineSmall),
       ),
     );
   }
+
+  /// Puts [style] in the display face, tightened.
+  ///
+  /// Negative tracking, because Bricolage at a heading size sets loose by
+  /// default and a wordmark wants its letters holding on to each other.
+  static TextStyle? _display(TextStyle? style) => style?.copyWith(
+    fontFamily: AppFonts.display,
+    fontWeight: FontWeight.w800,
+    letterSpacing: -0.5,
+  );
 }

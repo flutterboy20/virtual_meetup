@@ -1,5 +1,8 @@
+import 'dart:async';
 import 'dart:math' as math;
 
+import 'package:client/core/app_fonts.dart';
+import 'package:client/core/share_link.dart';
 import 'package:client/core/theme.dart';
 import 'package:client/features/app_config/view_model/app_config_view_model.dart';
 import 'package:client/features/welcome/view/bean_parade.dart';
@@ -106,110 +109,151 @@ class _WelcomeScreenState extends State<WelcomeScreen>
           ),
           SafeArea(
             child: Center(
-              child: SingleChildScrollView(
-                padding: EdgeInsets.symmetric(
-                  horizontal: isNarrow ? 20 : 24,
-                  vertical: isShort ? 10 : 24,
-                ),
-                child: ConstrainedBox(
-                  constraints: const BoxConstraints(maxWidth: 420),
-                  child: Column(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    crossAxisAlignment: CrossAxisAlignment.stretch,
-                    children: [
-                      _Rise(
-                        animation: _entrance,
-                        order: 0,
-                        child: _Title(
-                          config: config,
-                          compact: isNarrow || isShort,
+              // No scrollbar. This is a front door, and the track down the
+              // right edge of it is a browser artefact — it only exists
+              // because the column gives ground on a short window, and it
+              // reads as a document rather than a place.
+              child: ScrollConfiguration(
+                behavior: ScrollConfiguration.of(
+                  context,
+                ).copyWith(scrollbars: false),
+                child: SingleChildScrollView(
+                  padding: EdgeInsets.symmetric(
+                    horizontal: isNarrow ? 20 : 24,
+                    vertical: isShort ? 10 : 24,
+                  ),
+                  child: ConstrainedBox(
+                    constraints: const BoxConstraints(maxWidth: 420),
+                    child: Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        _Rise(
+                          animation: _entrance,
+                          order: 0,
+                          child: _Title(
+                            config: config,
+                            compact: isNarrow || isShort,
+                          ),
                         ),
-                      ),
-                      SizedBox(height: gap + 4),
-                      _Rise(
-                        animation: _entrance,
-                        order: 1,
-                        child: _Stage(
-                          loop: _loop,
-                          height: isShort ? 92 : 156,
+                        SizedBox(height: gap + 4),
+                        _Rise(
+                          animation: _entrance,
+                          order: 1,
+                          child: _Stage(
+                            loop: _loop,
+                            height: isShort ? 92 : 156,
+                          ),
                         ),
-                      ),
-                      SizedBox(height: gap),
-                      _Rise(
-                        animation: _entrance,
-                        order: 2,
-                        child: _OnlineCount(model: model, loop: _loop),
-                      ),
-                      SizedBox(height: gap),
-                      _Rise(
-                        animation: _entrance,
-                        order: 3,
-                        // Above the button, not below it: this is a choice
-                        // you make *before* you go in, and a picker under the
-                        // way in is a picker most people never see.
-                        child: MapPicker(
-                          selected: model.selectedMap,
-                          onSelected: model.selectMap,
-                          countOf: model.playersOn,
+                        SizedBox(height: gap),
+                        _Rise(
+                          animation: _entrance,
+                          order: 2,
+                          child: _OnlineCount(model: model, loop: _loop),
                         ),
-                      ),
-                      SizedBox(height: gap),
-                      _Rise(
-                        animation: _entrance,
-                        order: 4,
-                        child: _JoinButton(
-                          loop: _loop,
-                          // Deliberately still one word. The card right
-                          // above it is already lit up with the destination,
-                          // and a button that repeats the thing you just
-                          // tapped is a button that reads as a second choice.
-                          label: model.isReturning
-                              ? 'Continue as ${model.savedName}'
-                              : 'Join',
-                          onPressed: widget.onJoin,
+                        SizedBox(height: gap),
+                        _Rise(
+                          animation: _entrance,
+                          order: 3,
+                          // Above the button, not below it: this is a choice
+                          // you make *before* you go in, and a picker under the
+                          // way in is a picker most people never see.
+                          child: MapPicker(
+                            selected: model.selectedMap,
+                            onSelected: model.selectMap,
+                            countOf: model.playersOn,
+                          ),
                         ),
-                      ),
-                      if (model.isReturning) ...[
+                        SizedBox(height: gap),
+                        _Rise(
+                          animation: _entrance,
+                          order: 4,
+                          child: _JoinButton(
+                            loop: _loop,
+                            // Deliberately still one word. The card right
+                            // above it is already lit up with the destination,
+                            // and a button that repeats the thing you just
+                            // tapped is a button that reads as a second choice.
+                            label: model.isReturning
+                                ? 'Continue as ${model.savedName}'
+                                : 'Join',
+                            onPressed: widget.onJoin,
+                          ),
+                        ),
+                        if (model.isReturning) ...[
+                          const SizedBox(height: 4),
+                          _Rise(
+                            animation: _entrance,
+                            order: 5,
+                            child: TextButton(
+                              // Without this, a typo in a name is permanent for
+                              // as long as the browser keeps its local storage.
+                              onPressed: widget.onEditIdentity,
+                              style: TextButton.styleFrom(
+                                foregroundColor: AppTheme.mutedInk,
+                              ),
+                              child: const Text('Change name or bean'),
+                            ),
+                          ),
+                        ],
                         const SizedBox(height: 4),
                         _Rise(
                           animation: _entrance,
                           order: 5,
-                          child: TextButton(
-                            // Without this, a typo in a name is permanent for
-                            // as long as the browser keeps its local storage.
-                            onPressed: widget.onEditIdentity,
-                            style: TextButton.styleFrom(
-                              foregroundColor: AppTheme.mutedInk,
-                            ),
-                            child: const Text('Change name or bean'),
-                          ),
+                          child: _ShareButton(worldName: config.worldName),
                         ),
-                      ],
-                      SizedBox(height: gap + 4),
-                      // The stack credit is the first thing to go on a short
-                      // screen: it is the only line here that is neither a
-                      // way in nor an attribution to a person, and the maker
-                      // credit under it already says this is open source.
-                      if (!isShort) ...[
+                        SizedBox(height: gap + 4),
+                        // The stack credit is the first thing to go on a short
+                        // screen: it is the only line here that is neither a
+                        // way in nor an attribution to a person, and the maker
+                        // credit under it already says this is open source.
+                        if (!isShort) ...[
+                          _Rise(
+                            animation: _entrance,
+                            order: 5,
+                            child: const _Credit(),
+                          ),
+                          SizedBox(height: gap - 2),
+                        ],
                         _Rise(
                           animation: _entrance,
-                          order: 5,
-                          child: const _Credit(),
+                          order: 6,
+                          child: const MakerCredit(),
                         ),
-                        SizedBox(height: gap - 2),
                       ],
-                      _Rise(
-                        animation: _entrance,
-                        order: 6,
-                        child: const MakerCredit(),
-                      ),
-                    ],
+                    ),
                   ),
                 ),
               ),
             ),
           ),
         ],
+      ),
+    );
+  }
+}
+
+/// The way to hand this place to somebody standing next to you.
+///
+/// Under the way in rather than beside it: the front door has exactly one
+/// primary action, and a second button of equal weight next to Join is a
+/// choice nobody came here to make. Quiet, but on the first screen — because
+/// the moment people share a thing like this is before they have walked in,
+/// while they are still deciding who else should be here.
+class _ShareButton extends StatelessWidget {
+  const _ShareButton({required this.worldName});
+
+  /// What the shared message calls this place.
+  final String worldName;
+
+  @override
+  Widget build(BuildContext context) {
+    return Align(
+      child: TextButton.icon(
+        onPressed: () => unawaited(shareApp(context, worldName: worldName)),
+        icon: const Icon(Icons.ios_share, size: 16),
+        label: const Text('Share this world'),
+        style: TextButton.styleFrom(foregroundColor: AppTheme.mutedInk),
       ),
     );
   }
@@ -281,6 +325,7 @@ class _Title extends StatelessWidget {
           child: Text(
             config.worldName,
             style: TextStyle(
+              fontFamily: AppFonts.display,
               fontSize: compact ? 32 : 38,
               height: 1.05,
               fontWeight: FontWeight.w800,

@@ -596,7 +596,10 @@ class Relay {
     final sessionId = registry.sessionOf(playerId);
     if (player == null || sessionId == null) return null;
 
-    moderation.ban(sessionId);
+    // The name they were banned *under*, kept in memory so the admin's ban
+    // list is a list of people rather than a list of hashes. It never reaches
+    // the ban file; see `ModerationState`.
+    moderation.ban(sessionId, name: player.name);
     _sessions[playerId]?.terminate();
     // The linger window would otherwise hold their seat, name and position
     // warm for ninety seconds, for somebody who is not coming back.
@@ -609,11 +612,19 @@ class Relay {
   /// The preferred tool: a bad name is the likely incident in a world with no
   /// chat, and this fixes exactly that while leaving the person in the room.
   ///
-  /// Propagation is the interesting part. Names travel to a neighbour exactly
-  /// once, when a player appears, so there is no "this player changed" message
-  /// to send — [_forgetEverywhere] instead makes every client treat them as
-  /// newly appeared, and the next tick re-sends their metadata through the
-  /// path that already works. That is one tick: ~66ms.
+  /// Propagation is the interesting part, and it is done twice on purpose.
+  ///
+  /// A [PlayerRenamedMessage] goes out **immediately**, to everybody who can
+  /// currently see them and to the muted player themselves. That second half
+  /// is the one a re-appearance can never cover — your own bean is never in
+  /// your own snapshot — and without it a muted person goes on reading their
+  /// own name over their own head and cannot tell a mute from a bug.
+  ///
+  /// [_forgetEverywhere] still runs behind it, so the next tick re-sends the
+  /// full metadata through the appearance path. That is the belt to the
+  /// message's braces: the immediate message reaches the neighbours the
+  /// interest cap is currently holding, and the re-appearance catches anybody
+  /// the cap drops and re-admits in the same breath.
   ModerationOutcome? setNameMuted(String playerId, {required bool muted}) {
     final player = registry[playerId];
     final sessionId = registry.sessionOf(playerId);
@@ -648,6 +659,15 @@ class Relay {
     }
 
     registry.rename(playerId, newName);
+    final renamed = PlayerRenamedMessage(id: playerId, name: newName);
+    _relayToNeighbours(playerId, renamed);
+    // The target is skipped by `_relayToNeighbours` — it is written for
+    // emotes, where the sender already drew their own — so they are told
+    // here, explicitly. They are the whole point of this message.
+    final session = _sessions[playerId];
+    if (session != null) {
+      _sendRaw(session._connection, encodeMessage(renamed), playerId);
+    }
     _forgetEverywhere(playerId);
     return _record(action, playerId, chosenName);
   }
@@ -877,6 +897,9 @@ class RelaySession {
       case JoinRejectedMessage():
       case PlayerEmotedMessage():
       case PlayerBoardMessage():
+      case PlayerRenamedMessage():
+      case AdminBanListMessage():
+      case AdminUnbanMessage():
       case WorldStatsMessage():
       case AdminAuthResultMessage():
       case AdminPlayerListMessage():
@@ -1228,6 +1251,15 @@ class RelaySession {
     // snapshot, through the same path as every later change — one code path
     // for "who can I see", not two that can disagree.
     _send(WelcomeMessage(yourId: id));
+    // A muted player, coming back. The registry seated them under the
+    // placeholder — `effectiveName` is the one funnel every name goes
+    // through — but their own client still believes the name it typed, and
+    // nothing else on this socket would ever contradict it. Told once, here,
+    // rather than folded into the welcome: the welcome is an id and stays an
+    // id, and a rename is a rename whether it arrives now or an hour in.
+    if (seat.player.name != join.name) {
+      _send(PlayerRenamedMessage(id: id, name: seat.player.name));
+    }
     // Whatever else the server wants every arrival to have, as an already
     // encoded frame. Today that is the event's config; the relay is
     // deliberately not told what it is, only that there is one — which is

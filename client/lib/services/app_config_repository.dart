@@ -43,7 +43,7 @@ class StaticAppConfigRepository implements AppConfigRepository {
   /// — and discovering them is the entire point of putting them in config.
   static const String defaultDocument = '''
 {
-  "worldName": "Virtual Conference",
+  "worldName": "Virtual Meetup",
   "eyebrow": "A LITTLE WORLD FOR PEOPLE WHO SHOW UP",
   "tagline": "Pick a bean · walk around · say hi",
   "boardMessage": "setState is best state-management in flutter",

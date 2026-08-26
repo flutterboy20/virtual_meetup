@@ -315,11 +315,9 @@ class ConferenceMap extends GameMap {
     List<String> stageLines = AppConfig.defaultStageLines,
   ]) : _boardMessage = boardMessage,
        _stageLines = List.unmodifiable(stageLines),
-       sponsors = List.unmodifiable(sponsors),
-       obstacles = List.unmodifiable([
-         ...WorldLayout.fixedObstacles,
-         for (final sponsor in sponsors) RectObstacle(sponsor.footprint),
-       ]);
+       _sponsors = List.unmodifiable(sponsors),
+       _obstacles = _obstaclesFor(sponsors),
+       _bots = _botsFor(sponsors);
 
   /// The venue with no booths in it.
   ///
@@ -343,10 +341,25 @@ class ConferenceMap extends GameMap {
   @override
   List<BotSpec> get bots => _bots;
 
-  late final List<BotSpec> _bots = List.unmodifiable([
+  List<BotSpec> _bots;
+
+  /// How many of [bots] are the venue's own crowd rather than booth staff.
+  ///
+  /// The prefix is fixed and the tail moves with the sponsor list, which is
+  /// what lets [setSponsors] rebuild the staff without re-seeding the brains
+  /// of every bean in the garden.
+  static int get fixedBotCount => ConferenceBots.roster.length;
+
+  static List<BotSpec> _botsFor(List<Sponsor> sponsors) => List.unmodifiable([
     ...ConferenceBots.roster,
     ...ConferenceBots.boothStaff(sponsors),
   ]);
+
+  static List<Obstacle> _obstaclesFor(List<Sponsor> sponsors) =>
+      List.unmodifiable([
+        ...WorldLayout.fixedObstacles,
+        for (final sponsor in sponsors) RectObstacle(sponsor.footprint),
+      ]);
 
   /// What the hall's screen says, from config.
   ///
@@ -381,10 +394,35 @@ class ConferenceMap extends GameMap {
   }
 
   @override
-  final List<Sponsor> sponsors;
+  List<Sponsor> get sponsors => _sponsors;
+
+  List<Sponsor> _sponsors;
 
   @override
-  final List<Obstacle> obstacles;
+  List<Obstacle> get obstacles => _obstacles;
+
+  List<Obstacle> _obstacles;
+
+  /// Stands a new set of booths in the east arm.
+  ///
+  /// The second thing about a `ConferenceMap` that is allowed to change after
+  /// it is built, and it changes more than [applyConfig] does: a booth is a
+  /// painted thing, a rectangle you cannot walk through, and a bean standing
+  /// behind it, so all three move together or the room stops making sense.
+  ///
+  /// **Whoever calls this owns re-recording the furniture and re-mounting the
+  /// staff.** This object has no idea a `Picture` or a `BotComponent` exists;
+  /// see `ConferenceGame.setSponsors`, which does both.
+  ///
+  /// A bean that is left standing inside a booth that has just appeared is
+  /// not this method's problem either, and does not need to be: `resolve`
+  /// already lets somebody in an illegal spot walk out of it, precisely so a
+  /// config edit cannot seal anybody in.
+  void setSponsors(List<Sponsor> sponsors) {
+    _sponsors = List.unmodifiable(sponsors);
+    _obstacles = _obstaclesFor(_sponsors);
+    _bots = _botsFor(_sponsors);
+  }
 
   /// The pool, and nothing else.
   ///

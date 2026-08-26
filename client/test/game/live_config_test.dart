@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:client/core/sponsor.dart';
 import 'package:client/game/beach_map.dart';
 import 'package:client/game/conference_game.dart';
 import 'package:client/game/stage_screen_component.dart';
@@ -234,5 +235,115 @@ void main() {
       // is showing the same event by the time anybody walks back out to it.
       expect(seen.single.worldName, equals('DashConf'));
     });
+  });
+
+  group('the booths', () {
+    const acme = Sponsor(
+      id: 'acme',
+      name: 'Acme',
+      blurb: 'a booth',
+      x: 1130,
+      y: 478,
+      color: Color(0xFF54C5F8),
+    );
+
+    /// The same booth under a different sign, which is the case that used to
+    /// slip through: the id is unchanged, so an id-only equality read the two
+    /// lists as identical and nothing on screen moved.
+    const renamed = Sponsor(
+      id: 'acme',
+      name: 'Acme Industries',
+      blurb: 'a booth',
+      x: 1130,
+      y: 478,
+      color: Color(0xFF54C5F8),
+    );
+
+    testWithGame<ConferenceGame>(
+      'stand where a pushed list says, without a reload',
+      () => ConferenceGame(map: gameMapFor(MapId.conference)),
+      (game) async {
+        await game.ready();
+        final before = game.layout.obstacles.length;
+
+        game.setSponsors(const [acme]);
+
+        expect(game.layout.sponsors, equals(const [acme]));
+        // A booth is a rectangle you cannot walk through, not only a picture.
+        expect(game.layout.obstacles, hasLength(before + 1));
+        expect(game.collision.isFree(acme.x, acme.y), isFalse);
+      },
+    );
+
+    testWithGame<ConferenceGame>(
+      'follow a rename, which the id alone would have missed',
+      () => ConferenceGame(map: gameMapFor(MapId.conference)),
+      (game) async {
+        await game.ready();
+        game
+          ..setSponsors(const [acme])
+          ..setSponsors(const [renamed]);
+
+        expect(game.layout.sponsors.single.name, equals('Acme Industries'));
+      },
+    );
+
+    testWithGame<ConferenceGame>(
+      'bring their bean with them and take it away again',
+      () => ConferenceGame(map: gameMapFor(MapId.conference)),
+      (game) async {
+        await game.ready();
+        final crowd = ConferenceBots.roster.length;
+
+        game.setSponsors(const [acme]);
+        expect(game.allBots, hasLength(crowd + 1));
+
+        game.setSponsors(const []);
+        expect(game.allBots, hasLength(crowd));
+      },
+    );
+
+    testWithGame<ConferenceGame>(
+      'leave the venue own crowd alone while doing it',
+      () => ConferenceGame(map: gameMapFor(MapId.conference)),
+      (game) async {
+        // The garden must not visibly restart because somebody edited a
+        // sponsor's blurb, so the roster keeps its components and its brains.
+        await game.ready();
+        final crowd = ConferenceBots.roster.length;
+        final kept = game.allBots.take(crowd).toList();
+
+        game.setSponsors(const [acme]);
+
+        expect(game.allBots.take(crowd), orderedEquals(kept));
+      },
+    );
+
+    testWithGame<ConferenceGame>(
+      'do nothing at all when the list has not moved',
+      () => ConferenceGame(map: gameMapFor(MapId.conference)),
+      (game) async {
+        // A config arrives on every join, not only on an edit.
+        await game.ready();
+        game.setSponsors(const [acme]);
+        final unchanged = game.allBots.toList();
+
+        game.setSponsors(const [acme]);
+
+        expect(game.allBots, orderedEquals(unchanged));
+      },
+    );
+
+    testWithGame<ConferenceGame>(
+      'are ignored on a map that has none',
+      () => ConferenceGame(map: gameMapFor(MapId.beach)),
+      (game) async {
+        await game.ready();
+
+        game.setSponsors(const [acme]);
+
+        expect(game.layout.sponsors, isEmpty);
+      },
+    );
   });
 }

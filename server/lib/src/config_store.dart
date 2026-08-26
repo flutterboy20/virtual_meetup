@@ -100,18 +100,31 @@ class ConfigStore {
     return parsed;
   }
 
-  /// Closes the event until [until], or opens it when that is `null`.
+  /// Closes the event until [until], or opens it when that is `null`, and
+  /// says [message] while it is closed.
   ///
   /// Edits the held config rather than taking a document, because this is the
   /// one config change that is not somebody typing JSON: it comes from a
-  /// picker, it changes exactly one field, and rebuilding the whole document
-  /// around it on the client would be a second place for the other five
-  /// fields to get lost.
+  /// picker, it changes three fields at most, and rebuilding the whole
+  /// document around it on the client would be a second place for the other
+  /// six to get lost.
+  ///
+  /// [message] and [showTimer] are both optional and both left alone when
+  /// absent, so a caller that only means to move the moment cannot wipe the
+  /// sentence a moderator typed for the window they are extending.
   ///
   /// Persisted like every other change, which is what makes a maintenance
   /// window survive the restart it probably exists for.
-  AppConfig setMaintenanceUntil(DateTime? until) {
-    _config = _config.withMaintenanceUntil(until);
+  AppConfig setMaintenanceUntil(
+    DateTime? until, {
+    String? message,
+    bool? showTimer,
+  }) {
+    _config = _config.withMaintenanceUntil(
+      until,
+      message: message,
+      showTimer: showTimer,
+    );
     _write();
     return _config;
   }

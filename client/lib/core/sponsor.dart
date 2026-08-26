@@ -56,6 +56,34 @@ class Sponsor {
     );
   }
 
+  /// Returns the config entry this booth was read from.
+  ///
+  /// The inverse of [Sponsor.fromJson], and it exists so the moderation
+  /// screen can hand the bundled list back into the event document without a
+  /// second, hand-rolled idea of what a booth looks like on the wire.
+  ///
+  /// The colour goes back as `#RRGGBB`. Alpha is dropped rather than written,
+  /// because [parseColor] treats every booth as opaque and a round trip that
+  /// invented an `#FF` prefix would produce a document nobody typed.
+  Map<String, Object?> toJson() => {
+    'id': id,
+    'name': name,
+    'tagline': tagline,
+    'blurb': blurb,
+    'x': x,
+    'y': y,
+    'color': hexColor,
+  };
+
+  /// This booth's brand colour as `#RRGGBB`.
+  String get hexColor {
+    final rgb = (color.toARGB32() & 0xFFFFFF)
+        .toRadixString(16)
+        .padLeft(6, '0')
+        .toUpperCase();
+    return '#$rgb';
+  }
+
   /// Width of a booth's footprint, in world units.
   ///
   /// Fixed rather than per-sponsor: booths that are all the same size read as
@@ -139,11 +167,33 @@ class Sponsor {
     return Color(value);
   }
 
+  /// Two booths are equal when **every field** matches, not just the id.
+  ///
+  /// It used to be the id alone, on the reasoning that the id is what
+  /// identifies a booth. That is true and it was still the wrong answer: the
+  /// booth list is rebuilt from config every time one arrives, so everything
+  /// downstream asks "is this the same list as before?" to decide whether to
+  /// do any work — and under id-only equality a moderator renaming a sponsor
+  /// produced a list that compared *equal* to the old one. The new name
+  /// reached the config, the config reached the client, and nothing on screen
+  /// moved: not the booth's sign, not the panel that was open in front of it.
+  ///
+  /// The identity reading is still available where it is wanted, and it is
+  /// wanted in exactly one place: `readSponsors` rejects duplicates by
+  /// comparing `id` strings directly.
   @override
-  bool operator ==(Object other) => other is Sponsor && other.id == id;
+  bool operator ==(Object other) =>
+      other is Sponsor &&
+      other.id == id &&
+      other.name == name &&
+      other.blurb == blurb &&
+      other.tagline == tagline &&
+      other.x == x &&
+      other.y == y &&
+      other.color == color;
 
   @override
-  int get hashCode => id.hashCode;
+  int get hashCode => Object.hash(id, name, blurb, tagline, x, y, color);
 
   @override
   String toString() => 'Sponsor($id at $x,$y)';

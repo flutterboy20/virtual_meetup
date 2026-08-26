@@ -94,6 +94,8 @@ void main() {
         MessageType.adminPlayerList,
         MessageType.adminKick,
         MessageType.adminBan,
+        MessageType.adminBanList,
+        MessageType.adminUnban,
         MessageType.adminMuteName,
         MessageType.adminSetConfig,
         MessageType.adminSetMaintenance,

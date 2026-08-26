@@ -1,8 +1,8 @@
-import 'package:animated_text_kit/animated_text_kit.dart';
+import 'package:client/core/app_fonts.dart';
 import 'package:client/core/credits.dart';
+import 'package:client/core/open_link.dart';
 import 'package:client/core/theme.dart';
 import 'package:flutter/material.dart';
-import 'package:url_launcher/url_launcher.dart';
 
 /// The maker's line at the foot of the lobby: a name, and five ways to reach
 /// the person behind it.
@@ -15,22 +15,17 @@ class MakerCredit extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    // The one animation on this screen that is not driven by the welcome
-    // screen's loop — `animated_text_kit` owns its own controller — so the
-    // "reduce motion" check has to be made again here rather than inherited.
-    final still = MediaQuery.of(context).disableAnimations;
-
     return Column(
       children: [
         InkWell(
           onTap: () => openLink(Credits.authorUrl),
           borderRadius: BorderRadius.circular(10),
-          child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+          child: const Padding(
+            padding: EdgeInsets.symmetric(horizontal: 10, vertical: 4),
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
-                const Text(
+                Text(
                   'Made by',
                   style: TextStyle(
                     color: AppTheme.mutedInk,
@@ -38,7 +33,7 @@ class MakerCredit extends StatelessWidget {
                     letterSpacing: 1.2,
                   ),
                 ),
-                _ScrambledName(name: Credits.author, still: still),
+                _MakerName(name: Credits.author),
               ],
             ),
           ),
@@ -60,75 +55,41 @@ class MakerCredit extends StatelessWidget {
   }
 }
 
-/// Opens [url] in whatever the platform thinks should handle it.
+/// The maker's name, plainly.
 ///
-/// Failures are swallowed on purpose. Every one of these is a nice-to-have at
-/// the bottom of a lobby — a device with no mail client, a browser that
-/// blocked the popup, a link typed wrong — and none of them is worth a red
-/// snackbar over somebody about to walk into the world.
-Future<void> openLink(String url) async {
-  try {
-    await launchUrl(
-      Uri.parse(url),
-      mode: LaunchMode.externalApplication,
-    );
-  } on Object {
-    // Nothing to say and nobody to say it to.
-  }
-}
-
-/// The name, resolving out of noise.
+/// Was a scrambling animation from `animated_text_kit`. The package went, and
+/// with it the only third-party dependency on this screen, a controller and a
+/// timer per character running forever behind a static lobby, and a
+/// "reduce motion" branch that had to be checked here because the package
+/// could not know the OS had asked. A name at the foot of a page does not
+/// need any of that to be read.
 ///
-/// `ScrambleAnimatedText` from `animated_text_kit`: characters arrive one at a
-/// time, each cycling through junk for a moment before it settles on the real
-/// letter. Chosen over the liquid fill because that effect works by covering
-/// the box with an opaque colour and cutting the glyphs out of it, which needs
-/// a flat background to sit on — and this screen does not have one.
-///
-/// The box is fixed so the column does not jump: the text grows a character at
-/// a time, and centring it inside a set width lets it grow outwards from the
-/// middle instead of shoving the layout around.
-///
-/// It owns its own controller and a timer per character, which is why [still]
-/// is passed in — the package cannot know the OS asked for less motion.
-class _ScrambledName extends StatelessWidget {
-  const _ScrambledName({required this.name, required this.still});
+/// The box stays fixed: the column around it was laid out to a set height,
+/// and letting the name decide it again would move everything above it.
+class _MakerName extends StatelessWidget {
+  const _MakerName({required this.name});
 
   final String name;
 
-  /// Whether to render the plain name and stop, for "reduce motion".
-  final bool still;
-
   /// Big enough to be the last thing you read on the page.
   static const TextStyle _style = TextStyle(
+    // The display face, on the one line here that is a name rather than a
+    // label. It is the last thing you read on the front door.
+    fontFamily: AppFonts.display,
     color: AppTheme.ink,
     fontSize: 34,
     fontWeight: FontWeight.w800,
-    letterSpacing: 0.5,
+    letterSpacing: -0.4,
   );
 
-  static const double _boxWidth = 240;
   static const double _boxHeight = 46;
 
   @override
   Widget build(BuildContext context) {
     return SizedBox(
-      width: _boxWidth,
       height: _boxHeight,
       child: Center(
-        child: still
-            ? Text(name, style: _style)
-            : AnimatedTextKit(
-                repeatForever: true,
-                animatedTexts: [
-                  ScrambleAnimatedText(
-                    name,
-                    textStyle: _style,
-                    textAlign: TextAlign.center,
-                    speed: const Duration(milliseconds: 260),
-                  ),
-                ],
-              ),
+        child: Text(name, style: _style, textAlign: TextAlign.center),
       ),
     );
   }

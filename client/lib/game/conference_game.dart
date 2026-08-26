@@ -35,6 +35,7 @@ import 'package:client/services/network_client.dart';
 import 'package:flame/components.dart';
 import 'package:flame/events.dart';
 import 'package:flame/game.dart';
+import 'package:flutter/foundation.dart' show listEquals;
 import 'package:flutter/scheduler.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart' show KeyEventResult;
@@ -194,6 +195,12 @@ class ConferenceGame extends FlameGame with KeyboardEvents, TapCallbacks {
   /// The floating reactions. Available once [onLoad] has run.
   late final EmoteLayer emotes;
 
+  /// The names over everybody's heads. Available once [onLoad] has run.
+  ///
+  /// Held as a field only so a moderator's rename can reach your **own** tag.
+  /// Every other name it draws it reads out of [remotePlayers] on its own.
+  late final NametagLayer nametags;
+
   /// The map's gather-here glow. Available once [onLoad] has run.
   late final CrowdGlowComponent crowdGlow;
 
@@ -210,12 +217,17 @@ class ConferenceGame extends FlameGame with KeyboardEvents, TapCallbacks {
 
   /// Every bot this map *could* show, mounted or not.
   ///
-  /// Built once, in roster order. A moderator turning the crowd down does not
+  /// Built in roster order. A moderator turning the crowd down does not
   /// destroy anything — it unmounts the tail of this list, and turning it
   /// back up mounts the same beans in the same places. Rebuilding them would
   /// re-seed every brain, so the garden would visibly restart every time
   /// somebody nudged the dial.
-  late final List<BotComponent> allBots;
+  ///
+  /// The **booth staff** are the one exception, and only when the booths
+  /// themselves change: they stand where their booth stands, so a booth that
+  /// moves has to take its bean with it. See [setSponsors], which rebuilds
+  /// only that tail.
+  late List<BotComponent> allBots;
 
   /// What this device's frame rate has actually been doing.
   ///
@@ -400,7 +412,7 @@ class ConferenceGame extends FlameGame with KeyboardEvents, TapCallbacks {
         // *on* cannot share one z-order.
         SplashLayer(field: water.field),
         emotes,
-        NametagLayer(
+        nametags = NametagLayer(
           remotePlayers: remotePlayers,
           localPosition: () => bean.position,
           // Your own name, always on. Together with the ring under your feet
@@ -465,6 +477,64 @@ class ConferenceGame extends FlameGame with KeyboardEvents, TapCallbacks {
   ///
   /// A config equal to the one already in force does nothing at all, which
   /// matters because the server pushes on every join.
+  /// Stands a new set of booths in the east arm, live.
+  ///
+  /// The booths are the one part of the world that comes from config *and*
+  /// occupies space, so this does three things where [applyConfig] does one:
+  /// re-records the furniture the booths are painted into, rebuilds the beans
+  /// standing behind them, and swaps the collision rectangles under them.
+  ///
+  /// Nothing happens when the list has not actually changed — which is most
+  /// calls, because a config arrives on every join and not only on an edit.
+  /// That is what `Sponsor`'s value equality is for.
+  ///
+  /// A bean left standing where a booth has just appeared is **not** moved.
+  /// `WorldCollision.resolve` already lets somebody in an illegal spot walk
+  /// out of it, for exactly this case; teleporting them instead would mean
+  /// the world moved a player, which is the one thing this client does not
+  /// do to itself.
+  void setSponsors(List<Sponsor> sponsors) {
+    final map = layout;
+    if (map is! ConferenceMap) return;
+    if (listEquals(map.sponsors, sponsors)) return;
+
+    map.setSponsors(sponsors);
+    if (!isLoaded) return;
+    furniture.rebuild();
+    _rebuildBoothStaff();
+  }
+
+  /// Rebuilds the beans that stand behind booths, keeping the rest.
+  ///
+  /// The venue's own crowd is untouched — same components, same brains, same
+  /// walk they were half way through. Only the tail past
+  /// [ConferenceMap.fixedBotCount] is thrown away and built again.
+  void _rebuildBoothStaff() {
+    final fixed = ConferenceMap.fixedBotCount;
+    for (final bot in allBots.skip(fixed)) {
+      bot.removeFromParent();
+    }
+    if (bots.length > fixed) bots.removeRange(fixed, bots.length);
+
+    // The whole list is built and then most of it discarded, so that every
+    // bot keeps the seed its index gave it the first time. A tail built on
+    // its own would restart the seeding at zero and hand the booth staff the
+    // roster's gaits.
+    final rebuilt = buildBots(
+      specs: layout.bots,
+      map: layout,
+      isVisible: _isOnCamera,
+      onEmote: (bot) => emotes.show(bot.brain.pickEmote(), bot),
+    );
+    allBots = [...allBots.take(fixed), ...rebuilt.skip(fixed)];
+    _setBotCount(_wantedBotCount(_config));
+  }
+
+  /// Takes the parts of [config] the world paints, live.
+  ///
+  /// Called on join and on every moderator push. Booths are **not** here:
+  /// they are the one config-driven thing that occupies space, so they have
+  /// their own path — see [setSponsors].
   void applyConfig(AppConfig config) {
     if (config == _config) return;
     _config = config;
@@ -900,8 +970,18 @@ class ConferenceGame extends FlameGame with KeyboardEvents, TapCallbacks {
 
   void _onMessage(ProtocolMessage message) {
     switch (message) {
+      case PlayerRenamedMessage():
+        // Everybody else's rename is `RemotePlayers`' job. This branch is
+        // only for the one bean that is never in your own snapshot: yours.
+        if (message.id == _myId) nametags.localName = message.name;
       case WelcomeMessage():
         _myId = message.yourId;
+        // A fresh socket starts you back under the name you chose. If the
+        // server still has you muted it says so immediately afterwards, in a
+        // rename of its own — but a *previous* mute that a moderator lifted
+        // while you were disconnected would otherwise leave the placeholder
+        // stuck over your head with nothing left to clear it.
+        nametags.localName = playerName;
         // First connect *and* every reconnect. The board is a fact about a
         // player and everybody around them was just told how this player
         // looks, so it has to be part of that. It is not folded into the
@@ -936,6 +1016,8 @@ class ConferenceGame extends FlameGame with KeyboardEvents, TapCallbacks {
       case AdminPlayerListMessage():
       case AdminKickMessage():
       case AdminBanMessage():
+      case AdminBanListMessage():
+      case AdminUnbanMessage():
       case AdminMuteNameMessage():
       case AdminActionResultMessage():
       case AdminErrorMessage():

@@ -120,6 +120,68 @@ void main() {
     });
   });
 
+  group('the moderator notice', () {
+    testWidgets('replaces the built-in sentence rather than joining it', (
+      tester,
+    ) async {
+      final until = DateTime.now().add(const Duration(hours: 2));
+      await pumpApp(
+        tester,
+        config: AppConfig(
+          maintenanceUntil: until.toUtc(),
+          maintenanceMessage: 'The keynote overran.',
+        ),
+      );
+
+      expect(find.textContaining('The keynote overran.'), findsOneWidget);
+      expect(find.textContaining('Somebody is working on it'), findsNothing);
+      // The reopening time is still appended: it is a fact the screen knows
+      // and the moderator should not have to retype it.
+      expect(find.textContaining('The doors open again at'), findsOneWidget);
+    });
+
+    testWidgets('hides the clock and the time when it is told to', (
+      tester,
+    ) async {
+      await pumpApp(
+        tester,
+        config: AppConfig(
+          maintenanceUntil: DateTime.now()
+              .add(const Duration(hours: 2))
+              .toUtc(),
+          maintenanceMessage: 'Back as soon as we can.',
+          maintenanceShowTimer: false,
+        ),
+      );
+
+      expect(find.textContaining('to go'), findsNothing);
+      expect(find.textContaining('The doors open again at'), findsNothing);
+      expect(find.text('Back as soon as we can.'), findsOneWidget);
+    });
+
+    testWidgets('keeps the door shut even with the clock hidden', (
+      tester,
+    ) async {
+      // The gate is the server's. Hiding the countdown hides the promise,
+      // not the lock — a button that let somebody knock every second would
+      // be a worse countdown, not none.
+      await pumpApp(
+        tester,
+        config: AppConfig(
+          maintenanceUntil: DateTime.now()
+              .add(const Duration(hours: 2))
+              .toUtc(),
+          maintenanceShowTimer: false,
+        ),
+      );
+
+      final button = tester.widget<FilledButton>(
+        find.widgetWithText(FilledButton, 'Try again'),
+      );
+      expect(button.onPressed, isNull);
+    });
+  });
+
   group('the countdown', () {
     /// The screen on its own, over a clock the test moves by hand.
     ///

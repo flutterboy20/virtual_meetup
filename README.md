@@ -45,8 +45,12 @@ themselves, because two hundred people funnelled through a doorway is a jam.
 - **Lounge & pool** — the chill zone.
 - **Photo wall** — a "gather here" beacon that brightens as people stand on it.
 
-All of it is drawn from vector shapes in code. The world's entire art budget is one
-1.5KB JSON file (the sponsor list), because every image is cold-load time on venue wifi.
+All of it is drawn from vector shapes in code. There is not one image in the bundle —
+every prop, bean and floor tile is a path — because every image is cold-load time on
+venue wifi. The only binary assets are the four bundled typefaces (Archivo and
+Bricolage Grotesque, ~410KB together), which are bundled rather than fetched for the
+same reason: a face that arrives over the network arrives after the wordmark has
+already been painted in something else.
 
 You walk through other people, never into them. Player-player collision would turn a
 busy atrium into a traffic jam and give anyone a way to trap somebody in a corner.
@@ -194,9 +198,13 @@ fvm exec dart run melos run ci --no-select   # format + analyze + test, everythi
 | `METRICS_CSV` | server | *(off)* | Append one row of load metrics per reporting window to this file, for charting a run afterwards. Off by default: a server that writes files nobody asked for is a server that fills a disk during a six-hour event. |
 | `PERF_HUD` | client | `false` | Compiles in an on-screen `fps / p95 / jank% / worst` readout, for profiling on a real phone where there is no DevTools. `--dart-define=PERF_HUD=true`. Tree-shaken out of the shipping bundle. |
 
-Sponsor booths are **not** configuration in this sense — they are a bundled asset,
-`client/assets/sponsors.json`. Adding, moving or repainting a booth changes that file
-and nothing else.
+Sponsor booths are not environment configuration — they live in the **event document**
+a moderator pushes from the admin screen, under a `sponsors` key holding the same
+entries `client/assets/sponsors.json` holds. A document that names no sponsors falls
+back whole to that bundled file, so the app still ships with a working sponsor row and
+still opens it with no network. Booths are read when a world is built, so a pushed
+sponsor list lands for everybody on their next reload rather than moving a booth out
+from under a bean standing in it.
 
 No secrets live in this repo. Configuration is read from the environment at runtime.
 `bans.json` and `audit.log` are runtime state about real attendees and are gitignored.
@@ -249,7 +257,16 @@ Three actions, in increasing severity:
 |--------|--------------|------------|
 | **Mute name** | Their displayed name becomes `Guest` for everybody, within one tick (~66ms). They stay in the world and are not disconnected. | Yes, from the same row |
 | **Kick** | Disconnected immediately; their session is refused for `KICK_COOLDOWN_SECONDS` (30 by default) so their client cannot quietly reconnect, and the name they were kicked under is refused for the rest of the run. They come back through setup as a first-timer: new name, colour and bean. | The cooldown expires on its own; the name block lasts until the server restarts |
-| **Ban** | Disconnected, and their session is refused for the rest of the event. Survives a server restart. | Only by editing `BAN_FILE` |
+| **Ban** | Disconnected, and their session is refused for the rest of the event. Survives a server restart. | Yes, from the **Banned** tab |
+
+The **Banned** tab lists every ban in force and lifts one in two taps. Rows made
+during the current run are labelled with the name the person was banned under;
+rows read back off disk after a restart show only a handle and the date is gone,
+because the ban file keeps session ids and nothing else — a file of the names
+people were removed for is a document somebody then has to own, and it would
+outlive the event that needed it. A forgotten row is still liftable: the handle
+is a one-way digest of the session id, so it is the same handle before and after
+a restart.
 
 Mute-name is the one to reach for first. A bad *name* is the likely incident in a
 world with no chat, and it fixes exactly that without throwing somebody out of a
@@ -257,10 +274,18 @@ conference.
 
 Some deliberate limits, so nobody is surprised by them on the day:
 
-- **Bans key on the session id**, which lives in the browser's local storage.
-  Clearing it produces a new one. This is a tool for removing a disruption in ten
-  seconds, not an access control system, and over-building it was not worth the
-  complexity.
+- **Bans key on the session id**, which lives in the browser's storage for the
+  site. Clearing site data — or just opening a private window — produces a new
+  one, and the banned person walks back in as a first-timer: new name, new bean,
+  nothing of theirs kept. The same is true of the name block a kick leaves
+  behind. This is a tool for removing a disruption in ten seconds, not an access
+  control system, and over-building it was not worth the complexity. The Banned
+  tab says so on the screen, so nobody learns it during an incident.
+- **Session ids never leave the server.** One is a bearer token — anybody holding
+  it can walk into that player's bean — so neither the player list nor the ban
+  list carries one. A ban is named on the wire by a truncated SHA-256 of the
+  session id: one-way, and the same across restarts so a persisted ban stays
+  liftable.
 - **The token is held in memory only.** It is never persisted, never in the URL, and
   never in the client bundle. A refresh asks for it again — deliberately, because a
   moderator's phone gets put down on tables.

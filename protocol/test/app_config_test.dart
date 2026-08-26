@@ -1,7 +1,59 @@
+import 'dart:convert';
+
 import 'package:protocol/protocol.dart';
 import 'package:test/test.dart';
 
 void main() {
+  group('the repository link', () {
+    test('reads what a moderator wrote', () {
+      final config = parseAppConfig('{"githubLink": "https://example.dev/x"}');
+
+      expect(config.githubLink, equals('https://example.dev/x'));
+    });
+
+    test('falls back to this project when the key is missing', () {
+      // The QR in the corner of the world is a poster. A key dropped in an
+      // edit must show a repository, not an empty sheet.
+      expect(
+        parseAppConfig('{"tagline": "walk around"}').githubLink,
+        equals(AppConfig.defaultGithubLink),
+      );
+    });
+
+    test('falls back when the key is there but empty', () {
+      expect(
+        parseAppConfig('{"githubLink": "   "}').githubLink,
+        equals(AppConfig.defaultGithubLink),
+      );
+    });
+
+    test('survives the round trip the admin editor relies on', () {
+      final config = parseAppConfig('{"githubLink": "https://example.dev/x"}');
+
+      final later = parseAppConfig(jsonEncode(config.toJson()));
+
+      expect(later.githubLink, equals('https://example.dev/x'));
+      expect(later, equals(config));
+    });
+
+    test('is written even when nobody has changed it, so it is findable', () {
+      // The document is also the thing a moderator edits by hand: a key that
+      // only appears once somebody has used the feature is a key nobody
+      // discovers.
+      expect(
+        AppConfig.defaults.toJson()['githubLink'],
+        equals(AppConfig.defaultGithubLink),
+      );
+    });
+
+    test('two configs differing only in the link are not equal', () {
+      expect(
+        const AppConfig(githubLink: 'https://example.dev/x'),
+        isNot(equals(AppConfig.defaults)),
+      );
+    });
+  });
+
   group('parsing a config document', () {
     test('reads the wordmark and both lines of copy', () {
       final config = parseAppConfig(
@@ -250,6 +302,140 @@ void main() {
       final closed = AppConfig(maintenanceUntil: until);
 
       expect(closed.withMaintenanceUntil(null).maintenanceUntil, isNull);
+    });
+  });
+
+  group('the sponsor list', () {
+    test('carries the booth entries through untouched', () {
+      final config = parseAppConfig(
+        '{"sponsors": [{"id": "a", "name": "A", "x": 1, "y": 2, '
+        '"color": "#54C5F8"}]}',
+      );
+
+      expect(config.sponsors, hasLength(1));
+      expect(config.sponsors.single['id'], equals('a'));
+      // Opaque on purpose: the colour stays the text it was written as,
+      // because parsing it needs a `dart:ui` type this package cannot have.
+      expect(config.sponsors.single['color'], equals('#54C5F8'));
+    });
+
+    test('means "use the bundled list" when the key is missing', () {
+      expect(parseAppConfig('{}').sponsors, isEmpty);
+    });
+
+    test('drops entries that are not objects rather than throwing', () {
+      final config = parseAppConfig('{"sponsors": [1, {"id": "a"}, "x"]}');
+
+      expect(config.sponsors, hasLength(1));
+      expect(config.sponsors.single['id'], equals('a'));
+    });
+
+    test('falls back whole when the key is not a list', () {
+      expect(parseAppConfig('{"sponsors": "none"}').sponsors, isEmpty);
+    });
+
+    test('survives the round trip the admin editor relies on', () {
+      final config = parseAppConfig(
+        '{"sponsors": [{"id": "a", "name": "A", "x": 1, "y": 2, '
+        '"color": "#54C5F8"}]}',
+      );
+
+      final again = AppConfig.fromJson(config.toJson());
+
+      expect(again, equals(config));
+      expect(again.sponsors.single['name'], equals('A'));
+    });
+
+    test('two configs differing only in a booth are not equal', () {
+      final a = parseAppConfig('{"sponsors": [{"id": "a"}]}');
+      final b = parseAppConfig('{"sponsors": [{"id": "b"}]}');
+
+      expect(a, isNot(equals(b)));
+    });
+
+    test('an unrelated edit does not drop the booths', () {
+      // Both copy methods rebuild the whole config by hand, so a field one of
+      // them forgot to carry disappears on the next tap of a bot dial.
+      final config = parseAppConfig('{"sponsors": [{"id": "a"}]}');
+
+      expect(config.withBotCounts({MapId.beach: 3}).sponsors, hasLength(1));
+      expect(config.withMaintenanceUntil(null).sponsors, hasLength(1));
+    });
+
+    test('withSponsors replaces the list and keeps everything else', () {
+      final config = parseAppConfig(
+        '{"worldName": "Held", "sponsors": [{"id": "a"}]}',
+      );
+
+      final next = config.withSponsors([
+        {'id': 'b', 'name': 'Beta'},
+      ]);
+
+      expect(next.sponsors.single['id'], equals('b'));
+      expect(next.worldName, equals('Held'));
+    });
+  });
+
+  group('the pause notice', () {
+    test('carries the sentence and the clock flag through the wire', () {
+      final config = parseAppConfig(
+        '{"maintenanceMessage": " Back in ten. ", '
+        '"maintenanceShowTimer": false}',
+      );
+
+      expect(config.maintenanceMessage, equals('Back in ten.'));
+      expect(config.maintenanceShowTimer, isFalse);
+    });
+
+    test('says nothing and shows the clock by default', () {
+      // What every config written before this feature existed meant.
+      final config = parseAppConfig('{}');
+
+      expect(config.maintenanceMessage, isEmpty);
+      expect(config.maintenanceShowTimer, isTrue);
+    });
+
+    test('reads the flag written as a string, because people type it', () {
+      expect(
+        parseAppConfig('{"maintenanceShowTimer": "false"}')
+            .maintenanceShowTimer,
+        isFalse,
+      );
+      expect(
+        parseAppConfig('{"maintenanceShowTimer": 7}').maintenanceShowTimer,
+        isTrue,
+      );
+    });
+
+    test('survives the round trip the admin editor relies on', () {
+      final config = parseAppConfig(
+        '{"maintenanceMessage": "Back in ten.", '
+        '"maintenanceShowTimer": false}',
+      );
+
+      expect(AppConfig.fromJson(config.toJson()), equals(config));
+    });
+
+    test('moving the moment alone keeps the sentence', () {
+      // The failure this guards is a moderator extending a window and
+      // silently wiping the notice they wrote a minute earlier.
+      final config = parseAppConfig('{"maintenanceMessage": "Back in ten."}');
+
+      final later = config.withMaintenanceUntil(DateTime.utc(2031));
+
+      expect(later.maintenanceMessage, equals('Back in ten.'));
+      expect(later.maintenanceShowTimer, isTrue);
+    });
+
+    test('two configs differing only in the notice are not equal', () {
+      expect(
+        parseAppConfig('{"maintenanceMessage": "a"}'),
+        isNot(equals(parseAppConfig('{"maintenanceMessage": "b"}'))),
+      );
+      expect(
+        parseAppConfig('{"maintenanceShowTimer": false}'),
+        isNot(equals(parseAppConfig('{}'))),
+      );
     });
   });
 }

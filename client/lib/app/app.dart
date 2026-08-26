@@ -1,6 +1,9 @@
 import 'dart:async';
 
 import 'package:client/core/app_route.dart';
+import 'package:client/core/credits.dart';
+import 'package:client/core/event_clock.dart';
+import 'package:client/core/open_link.dart';
 import 'package:client/core/player_identity.dart';
 import 'package:client/core/server_endpoint.dart';
 import 'package:client/core/theme.dart';
@@ -243,6 +246,18 @@ class _AppFlowState extends State<AppFlow> {
   MapId _mapId = MapId.conference;
   String? _rejectionMessage;
 
+  /// When the server last said this device is still banned.
+  ///
+  /// Null until somebody has knocked, and cleared on every knock: a ban
+  /// screen with no note has not asked yet, and one with a note is reporting
+  /// an answer rather than a guess. The *first* refusal is not a note — the
+  /// player was in the world a moment ago, and stamping a time on the
+  /// sentence that just threw them out says nothing they do not know.
+  DateTime? _banCheckedAt;
+
+  /// Whether the player has asked the door to be tried again since the ban.
+  bool _knockedAfterBan = false;
+
   @override
   void initState() {
     super.initState();
@@ -295,6 +310,7 @@ class _AppFlowState extends State<AppFlow> {
   }
 
   void _join() {
+    _knockedAfterBan = false;
     // The picker writes straight to the store, so this is where that choice
     // is read back. Doing it here rather than plumbing a callback through the
     // welcome screen keeps one source of truth for "which map am I in".
@@ -335,6 +351,30 @@ class _AppFlowState extends State<AppFlow> {
       _identity = identity;
       _rejectionMessage = null;
       _stage = AppStage.world;
+    });
+  }
+
+  /// Knocks on the door again after a ban.
+  ///
+  /// **Asks the server by trying to join**, exactly as [_rejoinFromFull] does,
+  /// and for the same reason: nothing the client holds says whether a ban is
+  /// still in place. If it is, the join comes back as another `banned`, lands
+  /// on [_onRejected] and puts this screen back up with a fresh [_banCheckedAt]
+  /// — which is the only feedback a refused knock can honestly give.
+  ///
+  /// This is what a lifted ban used to cost: a page reload. The socket that
+  /// would have carried the good news was refused at the door, so a client
+  /// sitting on this screen had no way to hear about it. A button that re-opens
+  /// the socket is the whole fix.
+  void _retryFromBan() {
+    setState(() {
+      _knockedAfterBan = true;
+      // Cleared, not kept: the note describes the *last* answer, and holding
+      // a stale one under a knock that is still in flight would be a screen
+      // reporting on something that has not happened yet.
+      _banCheckedAt = null;
+      _rejectionMessage = null;
+      _stage = _identity == null ? AppStage.setup : AppStage.world;
     });
   }
 
@@ -381,6 +421,13 @@ class _AppFlowState extends State<AppFlow> {
     setState(() {
       _rejectionMessage = rejection.detail;
       if (rejection.reason == JoinRejection.kicked) _identity = null;
+      // Stamped on the way in, so the ban screen can say when it last asked
+      // rather than leaving somebody wondering whether the button did
+      // anything at all.
+      _banCheckedAt =
+          rejection.reason == JoinRejection.banned && _knockedAfterBan
+          ? DateTime.now()
+          : null;
       _stage = switch (rejection.reason) {
         JoinRejection.banned => AppStage.removed,
         JoinRejection.kicked => AppStage.kicked,
@@ -460,6 +507,8 @@ class _AppFlowState extends State<AppFlow> {
         _stage == AppStage.maintenance) {
       return MaintenanceScreen(
         until: config.maintenanceUntil,
+        message: config.maintenanceMessage,
+        showTimer: config.maintenanceShowTimer,
         onRetry: _leaveMaintenance,
       );
     }
@@ -489,6 +538,8 @@ class _AppFlowState extends State<AppFlow> {
       // no arm would be a compile error the day somebody removes the guard.
       AppStage.maintenance => MaintenanceScreen(
         until: config.maintenanceUntil,
+        message: config.maintenanceMessage,
+        showTimer: config.maintenanceShowTimer,
         onRetry: _leaveMaintenance,
       ),
       AppStage.full => FullScreen(
@@ -500,6 +551,14 @@ class _AppFlowState extends State<AppFlow> {
             _rejectionMessage ??
             'A moderator removed you from this '
                 'event.',
+        supportEmail: Credits.supportEmail,
+        hint:
+            'You can try again once the ban is lifted. Your name and your '
+            'bean are safe on this device.',
+        note: _banCheckedAt == null
+            ? null
+            : 'Last checked at ${formatLocalMoment(_banCheckedAt!)}.',
+        onRetry: _retryFromBan,
       ),
       AppStage.kicked => _RemovedScreen(
         message:
@@ -611,17 +670,23 @@ class _SetupStage extends StatelessWidget {
 
 /// What somebody a moderator removed sees.
 ///
-/// A ban gets no button. Every other failure in this app offers a way forward
-/// because every other failure has one; a ban does not, and a "Try again"
-/// there would be a lie that turns one refusal into a hundred.
+/// A ban and a kick share this screen because they are the same sentence with
+/// different waits behind them, and both now offer a way back — but only the
+/// server decides whether it opens. Tapping the button re-joins; if the ban is
+/// still in place the server refuses again and this screen comes straight back
+/// up, with [note] saying when it last asked.
 ///
-/// A kick passes [onRetry], because for a kick the button is the truth: the
-/// server will let them back in once the cooling-off period is over, and the
-/// only thing that must not happen is the *client* deciding when that is.
+/// That is the whole rule: **the client never decides it has been unbanned.**
+/// It is the same rule the maintenance screen follows. What changed is only
+/// that a person no longer has to reload the tab to find out — an unban used
+/// to be invisible to the one browser that most needed to see it.
 class _RemovedScreen extends StatelessWidget {
   const _RemovedScreen({
     required this.message,
     this.footer = 'Please speak to a member of the event team.',
+    this.supportEmail,
+    this.hint,
+    this.note,
     this.onRetry,
   });
 
@@ -630,38 +695,141 @@ class _RemovedScreen extends StatelessWidget {
   /// The quieter line under [message]: what happens next, or who to ask.
   final String footer;
 
+  /// An address to write to, shown as a tappable `mailto:` under [footer].
+  ///
+  /// Optional because a kick does not need one: that person is coming back in
+  /// thirty seconds and has nothing to appeal.
+  final String? supportEmail;
+
+  /// The small print under the button: what the button will actually do.
+  ///
+  /// Worth saying out loud on a ban screen, because the honest answer is "ask
+  /// the server again" — and somebody who knows that is somebody who will tap
+  /// it once after speaking to a moderator, rather than ten times in a row.
+  final String? hint;
+
+  /// When the server was last asked, or `null` before it has been.
+  final String? note;
+
   /// What to do when the player asks to come back, or `null` if they cannot.
   final VoidCallback? onRetry;
 
   @override
   Widget build(BuildContext context) {
+    final supportEmail = this.supportEmail;
+    final hint = this.hint;
+    final note = this.note;
+
     return Scaffold(
       body: Center(
-        child: Padding(
+        child: SingleChildScrollView(
           padding: const EdgeInsets.all(32),
-          child: Column(
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 360),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                const Icon(Icons.block, size: 40, color: AppTheme.bad),
+                const SizedBox(height: 16),
+                Text(
+                  message,
+                  textAlign: TextAlign.center,
+                  style: const TextStyle(color: AppTheme.ink, fontSize: 15),
+                ),
+                const SizedBox(height: 12),
+                Text(
+                  footer,
+                  textAlign: TextAlign.center,
+                  style: const TextStyle(
+                    color: AppTheme.mutedInk,
+                    fontSize: 13,
+                  ),
+                ),
+                if (supportEmail != null) ...[
+                  const SizedBox(height: 10),
+                  _SupportLink(email: supportEmail),
+                ],
+                if (onRetry != null) ...[
+                  const SizedBox(height: 20),
+                  FilledButton(
+                    onPressed: onRetry,
+                    child: const Text('Try again'),
+                  ),
+                ],
+                if (note != null) ...[
+                  const SizedBox(height: 12),
+                  Text(
+                    note,
+                    textAlign: TextAlign.center,
+                    style: const TextStyle(
+                      color: AppTheme.warn,
+                      fontSize: 12,
+                    ),
+                  ),
+                ],
+                if (hint != null) ...[
+                  const SizedBox(height: 12),
+                  Text(
+                    hint,
+                    textAlign: TextAlign.center,
+                    style: const TextStyle(
+                      color: AppTheme.mutedInk,
+                      fontSize: 12,
+                    ),
+                  ),
+                ],
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// The support address, as something a thumb can actually use.
+///
+/// Printed as well as linked, for the same reason the QR sheet prints its URL:
+/// a phone with no mail client set up opens nothing, and the person still
+/// needs to be able to read the address and type it somewhere else.
+class _SupportLink extends StatelessWidget {
+  const _SupportLink({required this.email});
+
+  final String email;
+
+  @override
+  Widget build(BuildContext context) {
+    return Semantics(
+      button: true,
+      link: true,
+      label: 'Email $email',
+      child: InkWell(
+        onTap: () => unawaited(openLink('mailto:$email')),
+        borderRadius: BorderRadius.circular(8),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+          child: Row(
             mainAxisSize: MainAxisSize.min,
             children: [
-              const Icon(Icons.block, size: 40, color: AppTheme.bad),
-              const SizedBox(height: 16),
-              Text(
-                message,
-                textAlign: TextAlign.center,
-                style: const TextStyle(color: AppTheme.ink, fontSize: 15),
+              const Icon(
+                Icons.alternate_email,
+                size: 14,
+                color: AppTheme.good,
               ),
-              const SizedBox(height: 12),
-              Text(
-                footer,
-                textAlign: TextAlign.center,
-                style: const TextStyle(color: AppTheme.mutedInk, fontSize: 13),
-              ),
-              if (onRetry != null) ...[
-                const SizedBox(height: 20),
-                FilledButton(
-                  onPressed: onRetry,
-                  child: const Text('Try again'),
+              const SizedBox(width: 6),
+              Flexible(
+                child: Text(
+                  email,
+                  textAlign: TextAlign.center,
+                  style: const TextStyle(
+                    color: AppTheme.good,
+                    fontSize: 13,
+                    fontWeight: FontWeight.w600,
+                    decoration: TextDecoration.underline,
+                    decorationColor: AppTheme.good,
+                  ),
                 ),
-              ],
+              ),
             ],
           ),
         ),

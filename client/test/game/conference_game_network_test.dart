@@ -59,6 +59,51 @@ void main() {
     expect(game.myId, 'p7');
   });
 
+  testWidgets('wears the name a moderator gave it over its own bean', (
+    tester,
+  ) async {
+    // Your own bean is never in your own snapshot, so this is the only way a
+    // muted person ever finds out. Without it a mute is indistinguishable
+    // from a bug, from the one seat that matters most.
+    final (:game, :socket) = await pumpGame(tester);
+    socket.emit(const WelcomeMessage(yourId: 'p7'));
+    await tick(tester, frames: 2);
+
+    socket.emit(const PlayerRenamedMessage(id: 'p7', name: 'Guest'));
+    await tick(tester, frames: 2);
+
+    expect(game.nametags.localName, equals('Guest'));
+  });
+
+  testWidgets('ignores a rename addressed to somebody else', (tester) async {
+    final (:game, :socket) = await pumpGame(tester);
+    socket.emit(const WelcomeMessage(yourId: 'p7'));
+    await tick(tester, frames: 2);
+    final before = game.nametags.localName;
+
+    socket.emit(const PlayerRenamedMessage(id: 'p9', name: 'Guest'));
+    await tick(tester, frames: 2);
+
+    expect(game.nametags.localName, equals(before));
+  });
+
+  testWidgets('takes the placeholder off again on a fresh welcome', (
+    tester,
+  ) async {
+    // A mute lifted while this client was disconnected leaves nothing behind
+    // to clear the placeholder, so the welcome does it.
+    final (:game, :socket) = await pumpGame(tester);
+    socket.emit(const WelcomeMessage(yourId: 'p7'));
+    await tick(tester, frames: 2);
+    socket.emit(const PlayerRenamedMessage(id: 'p7', name: 'Guest'));
+    await tick(tester, frames: 2);
+
+    socket.emit(const WelcomeMessage(yourId: 'p7'));
+    await tick(tester, frames: 2);
+
+    expect(game.nametags.localName, equals(''));
+  });
+
   testWidgets('shows the players the first snapshot named', (tester) async {
     final (:game, :socket) = await pumpGame(tester);
 
