@@ -1,4 +1,11 @@
 * text=auto eol=lf
 
-# Binary assets
+# Binary assets. Declared rather than left to git's content heuristic: the
+# heuristic gets fonts right today, but `* text=auto eol=lf` above means a
+# wrong guess would rewrite bytes inside a TTF on checkout, and the corruption
+# would only show up as a font that silently fails to load.
 *.png binary
+*.ttf binary
+*.otf binary
+*.woff binary
+*.woff2 binary

@@ -89,7 +89,7 @@ class AppConfig {
   ///
   /// Deliberately generic out of the box. An organiser sets their own name
   /// here rather than editing a widget.
-  static const String defaultWorldName = 'Virtual Conference';
+  static const String defaultWorldName = 'Virtual Meetup';
 
   /// The small capsule over the wordmark, shown in caps by the welcome screen.
   static const String defaultEyebrow = 'A LITTLE WORLD FOR PEOPLE WHO SHOW UP';
@@ -129,7 +129,7 @@ class AppConfig {
   /// their repo, not to ours — and it must be changeable from the moderator's
   /// screen on the morning, not from a rebuild.
   static const String defaultGithubLink =
-      'https://github.com/flutterboy20/virtual_conference';
+      'https://github.com/flutterboy20/virtual_meetup';
 
   /// The wordmark on the front door.
   final String worldName;

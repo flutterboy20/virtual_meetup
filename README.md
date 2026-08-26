@@ -1,10 +1,10 @@
-# Virtual Conference
+# Virtual Meetup
 
 A browser-based, multiplayer walk-around world for any conference or meetup — open a
 link on your phone, pick a character, and roam one shared map with everyone else in
 the room. The event's name and front-door copy are config, not code.
 
-[![CI](https://github.com/flutterboy20/virtual_conference/actions/workflows/ci.yml/badge.svg)](https://github.com/flutterboy20/virtual_conference/actions/workflows/ci.yml)
+[![CI](https://github.com/flutterboy20/virtual_meetup/actions/workflows/ci.yml/badge.svg)](https://github.com/flutterboy20/virtual_meetup/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 
 > **Status:** feature-complete and hardened. Not yet deployed.
@@ -73,8 +73,8 @@ and the plain-Dart server import the same message definitions.
 Requires [`fvm`](https://fvm.app). The Flutter version is pinned in `.fvmrc`.
 
 ```bash
-git clone https://github.com/flutterboy20/virtual_conference.git
-cd virtual_conference
+git clone https://github.com/flutterboy20/virtual_meetup.git
+cd virtual_meetup
 
 fvm install                                  # installs the pinned Flutter SDK
 fvm exec dart run melos bootstrap            # resolves the pub workspace

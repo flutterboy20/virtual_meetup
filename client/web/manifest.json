@@ -1,6 +1,6 @@
 {
-    "name": "Virtual Conference",
-    "short_name": "Conference",
+    "name": "Virtual Meetup",
+    "short_name": "Meetup",
     "start_url": ".",
     "display": "standalone",
     "background_color": "#0175C2",

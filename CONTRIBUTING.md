@@ -10,8 +10,8 @@ mismatched SDK or a plain `flutter pub get` in one package will not resolve the
 workspace correctly.
 
 ```bash
-git clone https://github.com/flutterboy20/virtual_conference.git
-cd virtual_conference
+git clone https://github.com/flutterboy20/virtual_meetup.git
+cd virtual_meetup
 
 fvm install                         # installs the pinned Flutter SDK
 fvm exec dart run melos bootstrap   # resolves all four packages together

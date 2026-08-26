@@ -36,7 +36,29 @@
 /// v5 server is sent back to setup instead of crashing or hanging. The wording
 /// it shows is wrong; the behaviour is safe and self-correcting. Nothing on
 /// the way *up* changed at all, so a v5 client on a v4 server is unaffected.
-const int protocolVersion = 5;
+/// v6 added three message types and changed nothing that already existed:
+/// `playerRenamed` on the way down, and the moderation pair `admin.bans` and
+/// `admin.unban`. No message grew a field, none was removed, and no field
+/// changed meaning.
+///
+/// A v5 peer is fine, for the reason the v4 case was.
+/// `MessageType.fromWireName` answers `MessageType.unknown` for a name it has
+/// never heard of rather than throwing, and both ends already drop an unknown
+/// message — so the three new types are invisible to a v5 build instead of
+/// fatal to it.
+///
+/// What a v5 *client* loses is only the promptness of a rename: told nothing,
+/// it keeps drawing the old name until that player leaves its view and comes
+/// back, at which point the snapshot carries the new one. Wrong for a while,
+/// never wrong forever, and never a crash. The one case a re-appearance
+/// cannot fix — your own name, since your own bean is never in your own
+/// snapshot — is exactly why `playerRenamed` exists.
+///
+/// The two `admin.*` types are not really a version question at all. The
+/// moderation screen is served by the same deployment as the server it talks
+/// to, so a skew there is a half-finished deploy rather than a peer worth
+/// designing around.
+const int protocolVersion = 6;
 
 /// Returns a human-readable banner naming the protocol version.
 ///

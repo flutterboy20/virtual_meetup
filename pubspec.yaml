@@ -1,4 +1,4 @@
-name: virtual_conference
+name: virtual_meetup
 description: >-
   Melos workspace root for the virtual conference walk-around world.
   Not a published package — it only ties the three real packages together.

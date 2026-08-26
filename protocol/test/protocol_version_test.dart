@@ -4,7 +4,7 @@ import 'package:test/test.dart';
 void main() {
   group('protocolVersion', () {
     test('is 5 — Phase 13 added JoinRejection.worldFull', () {
-      expect(protocolVersion, equals(5));
+      expect(protocolVersion, equals(6));
     });
   });
 

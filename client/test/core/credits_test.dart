@@ -63,8 +63,8 @@ void main() {
       // A shortening a person can check against the QR above it, not a
       // rewrite they have to trust instead of the link.
       expect(
-        Credits.linkLabel('https://github.com/flutterboy20/virtual_conference'),
-        equals('github.com/flutterboy20/virtual_conference'),
+        Credits.linkLabel('https://github.com/flutterboy20/virtual_meetup'),
+        equals('github.com/flutterboy20/virtual_meetup'),
       );
     });
 
