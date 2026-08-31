@@ -1,3 +1,4 @@
+import 'package:client/core/app_version.dart';
 import 'package:client/core/theme.dart';
 import 'package:client/features/world/view/connection_chip.dart';
 import 'package:client/features/world/view/credit_badge.dart';
@@ -165,7 +166,23 @@ class WorldMenuDrawer extends StatelessWidget {
             const Divider(color: AppTheme.mutedInk, height: 1),
             Padding(
               padding: const EdgeInsets.symmetric(vertical: 12),
-              child: CreditBadge(githubLink: githubLink),
+              child: Column(
+                children: [
+                  CreditBadge(githubLink: githubLink),
+                  const SizedBox(height: 8),
+                  // Which build this phone is actually running. The drawer is
+                  // the only screen a player can reach at any moment without
+                  // leaving the world, which makes it the one place a version
+                  // is worth asking somebody to read out over a noisy room.
+                  Text(
+                    appVersionLabel(),
+                    style: const TextStyle(
+                      color: AppTheme.mutedInk,
+                      fontSize: 11,
+                    ),
+                  ),
+                ],
+              ),
             ),
           ],
         ),

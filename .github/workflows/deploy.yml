@@ -33,6 +33,48 @@ jobs:
         with:
           persist-credentials: false
 
+      # The release number lives in exactly one place: client/pubspec.yaml.
+      # `flutter build web` copies it into build/web/version.json by itself,
+      # and the --dart-define below puts the same string in the drawer, so a
+      # phone on the floor and a curl from a laptop agree on what is running.
+      - name: Read the release version
+        id: version
+        run: |
+          version=$(sed -n 's/^version:[[:space:]]*//p' client/pubspec.yaml | head -1 | tr -d '\r')
+          test -n "$version" || { echo "::error::no version: line in client/pubspec.yaml"; exit 1; }
+          echo "about to build $version"
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+
+      # Runs BEFORE the build, which takes minutes — a deploy that is going to
+      # be refused should be refused in seconds.
+      #
+      # The live site is the source of truth for "what is deployed", not a file
+      # in the repo and not a tag: version.json is written by the build that is
+      # actually serving, and Caddy sends it with Cache-Control: no-cache
+      # precisely so this read cannot be stale.
+      #
+      # Shipping the same number twice is not itself an outage. It is worse
+      # than one: two different bundles both calling themselves 1.0.0+2, and
+      # no way left to tell from a phone which of them somebody is looking at.
+      - name: Refuse to redeploy the version that is already live
+        env:
+          SITE_DOMAIN: ${{ vars.SITE_DOMAIN }}
+          NEW_VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          live=$(curl -fsS --max-time 10 "https://${SITE_DOMAIN}/version.json" || true)
+          if [ -z "$live" ]; then
+            echo "::warning::could not read https://${SITE_DOMAIN}/version.json — first deploy, or the site is down. Bump check skipped."
+            exit 0
+          fi
+          # version.json splits the pubspec string in two, so put it back:
+          # {"version":"1.0.0","build_number":"2"} -> 1.0.0+2
+          live_version=$(printf '%s' "$live" | jq -r '.version + (if (.build_number // "") == "" then "" else "+" + .build_number end)')
+          echo "live: $live_version    new: $NEW_VERSION"
+          if [ "$live_version" = "$NEW_VERSION" ]; then
+            echo "::error::$NEW_VERSION is already live. Bump the version: line in client/pubspec.yaml before deploying."
+            exit 1
+          fi
+
       # Keep in sync with .fvmrc and ci.yml.
       - uses: subosito/flutter-action@1a449444c387b1966244ae4d4f8c696479add0b2 # v2.23.0
         with:
@@ -51,11 +93,13 @@ jobs:
       - name: Build the client
         env:
           SITE_DOMAIN: ${{ vars.SITE_DOMAIN }}
+          APP_VERSION: ${{ steps.version.outputs.version }}
         run: |
           test -n "$SITE_DOMAIN" || { echo "::error::repository variable SITE_DOMAIN is not set"; exit 1; }
           cd client
           flutter build web --release \
-            --dart-define=SERVER_URL=wss://${SITE_DOMAIN}/ws
+            --dart-define=SERVER_URL=wss://${SITE_DOMAIN}/ws \
+            --dart-define=APP_VERSION=${APP_VERSION}
 
       # The failure this guards against is silent: forgetting the flag above
       # still BUILDS, and ships a bundle that dials ws://localhost:8080/ws
@@ -145,6 +189,28 @@ jobs:
             sleep 5
           done
           echo "::error::/health did not answer after the deploy"
+          exit 1
+
+      # /health proves the relay came back. This proves the BUNDLE changed —
+      # a different failure entirely, and the quiet one: the rsync could have
+      # gone to the wrong path, or the relay could have restarted on new code
+      # while every phone kept loading the old web build, and /health would
+      # answer cheerfully through all of it.
+      - name: Verify the live version is the one just built
+        env:
+          SITE_DOMAIN: ${{ vars.SITE_DOMAIN }}
+          NEW_VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          for i in $(seq 1 5); do
+            live=$(curl -fsS --max-time 10 "https://${SITE_DOMAIN}/version.json" || true)
+            live_version=$(printf '%s' "$live" | jq -r '.version + (if (.build_number // "") == "" then "" else "+" + .build_number end)' 2>/dev/null || true)
+            if [ "$live_version" = "$NEW_VERSION" ]; then
+              echo "live version is $live_version"
+              exit 0
+            fi
+            sleep 3
+          done
+          echo "::error::the site is serving '$live_version', expected '$NEW_VERSION' — the new bundle did not land"
           exit 1
 
       - name: Remove the key
