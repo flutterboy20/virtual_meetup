@@ -60,12 +60,20 @@ jobs:
       # The failure this guards against is silent: forgetting the flag above
       # still BUILDS, and ships a bundle that dials ws://localhost:8080/ws
       # forever. The app loads, the art renders, and nobody can join.
-      - name: Refuse to ship a bundle pointing at localhost
+      #
+      # This asserts the real host is PRESENT rather than that localhost is
+      # absent. `localhost:8080` is in every bundle regardless: it is
+      # `defaultServerUrl`, the fallback branch of `resolveServerUri`, guarded
+      # by a runtime `Uri.tryParse` that dart2js cannot fold away. Testing for
+      # its absence fails every build, including the good ones.
+      - name: Refuse to ship a bundle that is not pointing at SITE_DOMAIN
+        env:
+          SITE_DOMAIN: ${{ vars.SITE_DOMAIN }}
         run: |
-          count=$(grep -c "localhost:8080" client/build/web/main.dart.js || true)
-          echo "localhost:8080 occurrences: $count"
-          if [ "$count" != "0" ]; then
-            echo "::error::built bundle still points at localhost — the --dart-define did not apply"
+          count=$(grep -c "wss://${SITE_DOMAIN}/ws" client/build/web/main.dart.js || true)
+          echo "wss://${SITE_DOMAIN}/ws occurrences: $count"
+          if [ "$count" = "0" ]; then
+            echo "::error::built bundle does not contain wss://${SITE_DOMAIN}/ws — the --dart-define did not apply"
             exit 1
           fi
 
