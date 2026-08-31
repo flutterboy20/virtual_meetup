@@ -7,9 +7,9 @@ on:
   workflow_dispatch:
     inputs:
       confirm:
-        description: 'Type DEPLOY to confirm'
+        description: "Type DEPLOY to confirm"
         required: true
-        default: ''
+        default: ""
 
 concurrency:
   group: deploy-production
@@ -87,19 +87,15 @@ jobs:
           chmod 600 ~/.ssh/id_deploy
           ssh-keyscan -H "$DEPLOY_HOST" >> ~/.ssh/known_hosts 2>/dev/null
 
-      # The VM runs the Ubuntu 24.04 *minimal* cloud image, which ships without
-      # rsync. Every upload below then dies with `rsync: command not found`
-      # printed by the REMOTE shell — the local sender is fine, which makes the
-      # error read like a runner problem when it is not. Idempotent: once rsync
-      # is installed this is a single `command -v` and nothing else.
-      - name: Make sure rsync exists on the server
+      - name: Make sure the server is ready to receive
         env:
           DEPLOY_HOST: ${{ secrets.DEPLOY_HOST }}
           DEPLOY_USER: ${{ secrets.DEPLOY_USER }}
         run: |
           ssh -i ~/.ssh/id_deploy -o StrictHostKeyChecking=yes \
             "${DEPLOY_USER}@${DEPLOY_HOST}" \
-            'command -v rsync >/dev/null 2>&1 || { sudo apt-get update -qq && sudo DEBIAN_FRONTEND=noninteractive apt-get install -y -qq rsync; }'
+            'command -v rsync >/dev/null 2>&1 || { sudo apt-get update -qq && sudo DEBIAN_FRONTEND=noninteractive apt-get install -y -qq rsync; }
+             mkdir -p /opt/virtual-meetup/deploy/web'
 
       # --delete is safe here and only here: deploy/web is build output and
       # nothing on the server writes to it. Stale hashed assets from the
@@ -111,7 +107,7 @@ jobs:
         run: |
           rsync -az --delete -e "ssh -i ~/.ssh/id_deploy -o StrictHostKeyChecking=yes" \
             client/build/web/ \
-            "${DEPLOY_USER}@${DEPLOY_HOST}:/opt/virtual-conference/deploy/web/"
+            "${DEPLOY_USER}@${DEPLOY_HOST}:/opt/virtual-meetup/deploy/web/"
 
       # **No --delete on these.** deploy/ on the server holds .env and data/,
       # which exist only there. A --delete here would erase the admin token
@@ -124,10 +120,10 @@ jobs:
           rsync -az -e "ssh -i ~/.ssh/id_deploy -o StrictHostKeyChecking=yes" \
             --exclude '.dart_tool' --exclude 'build' \
             --exclude '*.log' --exclude 'bans.json' --exclude 'config.json' \
-            protocol server "${DEPLOY_USER}@${DEPLOY_HOST}:/opt/virtual-conference/"
+            protocol server "${DEPLOY_USER}@${DEPLOY_HOST}:/opt/virtual-meetup/"
           rsync -az -e "ssh -i ~/.ssh/id_deploy -o StrictHostKeyChecking=yes" \
             --exclude '.env' --exclude 'data' --exclude 'web' \
-            deploy/ "${DEPLOY_USER}@${DEPLOY_HOST}:/opt/virtual-conference/deploy/"
+            deploy/ "${DEPLOY_USER}@${DEPLOY_HOST}:/opt/virtual-meetup/deploy/"
 
       # Only the relay is rebuilt. Caddy keeps running, which means the
       # certificate is untouched and the static bundle is served throughout.
@@ -138,7 +134,7 @@ jobs:
         run: |
           ssh -i ~/.ssh/id_deploy -o StrictHostKeyChecking=yes \
             "${DEPLOY_USER}@${DEPLOY_HOST}" \
-            'cd /opt/virtual-conference/deploy && docker compose up -d --build relay'
+            'cd /opt/virtual-meetup/deploy && docker compose up -d --build relay'
 
       - name: Verify the deployment answers
         env:
