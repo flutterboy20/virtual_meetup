@@ -87,6 +87,20 @@ jobs:
           chmod 600 ~/.ssh/id_deploy
           ssh-keyscan -H "$DEPLOY_HOST" >> ~/.ssh/known_hosts 2>/dev/null
 
+      # The VM runs the Ubuntu 24.04 *minimal* cloud image, which ships without
+      # rsync. Every upload below then dies with `rsync: command not found`
+      # printed by the REMOTE shell — the local sender is fine, which makes the
+      # error read like a runner problem when it is not. Idempotent: once rsync
+      # is installed this is a single `command -v` and nothing else.
+      - name: Make sure rsync exists on the server
+        env:
+          DEPLOY_HOST: ${{ secrets.DEPLOY_HOST }}
+          DEPLOY_USER: ${{ secrets.DEPLOY_USER }}
+        run: |
+          ssh -i ~/.ssh/id_deploy -o StrictHostKeyChecking=yes \
+            "${DEPLOY_USER}@${DEPLOY_HOST}" \
+            'command -v rsync >/dev/null 2>&1 || { sudo apt-get update -qq && sudo DEBIAN_FRONTEND=noninteractive apt-get install -y -qq rsync; }'
+
       # --delete is safe here and only here: deploy/web is build output and
       # nothing on the server writes to it. Stale hashed assets from the
       # previous build would otherwise accumulate forever.
