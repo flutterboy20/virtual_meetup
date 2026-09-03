@@ -1101,6 +1101,23 @@ class RelaySession {
 
   void _displace() {
     if (_closed) return;
+    // Before `_closed`, because `_send` is the last thing this socket will
+    // ever do and a closed session has no business writing. The client is
+    // told *why* rather than simply hung up on: a bare close is
+    // indistinguishable from a dropped connection, so the supervisor on the
+    // other end backs off, reconnects with the same session id, and displaces
+    // whichever socket took this seat — which displaces this one again. Two
+    // browser tabs on one device share their storage, so they share a session
+    // id, and that loop is what a person sees as "Reconnecting…" forever.
+    // One sentence on the way out ends it.
+    _send(
+      const JoinRejectedMessage(
+        reason: JoinRejection.displaced,
+        detail:
+            'This event is now open in another tab or window on this device. '
+            'Only one can be connected at a time.',
+      ),
+    );
     _closed = true;
     _displaced = true;
     _known.clear();

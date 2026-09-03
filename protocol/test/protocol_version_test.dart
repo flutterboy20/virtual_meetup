@@ -3,8 +3,8 @@ import 'package:test/test.dart';
 
 void main() {
   group('protocolVersion', () {
-    test('is 5 — Phase 13 added JoinRejection.worldFull', () {
-      expect(protocolVersion, equals(6));
+    test('is 7 — JoinRejection.displaced was added', () {
+      expect(protocolVersion, equals(7));
     });
   });
 

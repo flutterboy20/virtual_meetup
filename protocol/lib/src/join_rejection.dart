@@ -66,7 +66,28 @@ enum JoinRejection {
   /// Failing closed is the deliberate choice: the alternative, throwing on a
   /// reason this build has never heard of, would turn every future addition
   /// to this enum into a crash on every older client.
-  worldFull('worldFull');
+  worldFull('worldFull'),
+
+  /// This session just joined on another socket, so this one is being let go.
+  ///
+  /// One person, one seat: a session id is how the server recognises a
+  /// returning device, so two live sockets carrying the same id are two
+  /// claims on one bean and the newer one wins. That is the reconnect path
+  /// working as designed — but a *browser* shares its storage between tabs,
+  /// so the same id turns up twice whenever somebody opens the link a second
+  /// time, and neither tab has done anything wrong.
+  ///
+  /// Without this reason, the displaced socket simply closes and the client
+  /// cannot tell that from a dropped connection: it backs off, reconnects,
+  /// displaces the other tab, and the two take turns evicting each other for
+  /// as long as both stay open. Saying so out loud is what stops the loop —
+  /// the displaced client stops retrying and hands the choice to the person,
+  /// exactly as [kicked] does and for the same reason.
+  ///
+  /// Retryable, unlike [banned]: the way back in is a deliberate tap, which
+  /// displaces whichever tab holds the seat now. The rule is only that a
+  /// *timer* must never make that decision.
+  displaced('displaced');
 
   const JoinRejection(this.wireName);
 

@@ -227,6 +227,44 @@ void main() {
       expect(firstSession.isDisplaced, isTrue);
     });
 
+    test('the displaced socket is told why before it is closed', () {
+      // Without this the close is indistinguishable from a dropped
+      // connection, so the losing client backs off, reconnects under the same
+      // session id and displaces the winner — which displaces it back. Two
+      // browser tabs share their storage, so they share a session id, and the
+      // pair of them trade the seat for as long as both stay open. One
+      // sentence on the way out is what ends the loop.
+      final session = nextSessionId();
+      final (first, _) = connect(join, session);
+      connect(join, session);
+
+      final rejection = first.received.whereType<JoinRejectedMessage>().single;
+
+      expect(rejection.reason, equals(JoinRejection.displaced));
+      expect(rejection.detail, isNotEmpty);
+      expect(first.closed, isTrue);
+    });
+
+    test('only the displaced socket hears about it', () {
+      // The socket that took the seat did nothing wrong and must not be told
+      // it lost one.
+      final session = nextSessionId();
+      connect(join, session);
+      final (second, _) = connect(join, session);
+
+      expect(second.received.whereType<JoinRejectedMessage>(), isEmpty);
+    });
+
+    test('a socket that dies for its own reasons is told nothing', () {
+      // The rejection is a statement about *this* seat being taken by
+      // somebody else. A tab closing has no such news to carry.
+      final (connection, session) = connect(join, nextSessionId());
+
+      session.close();
+
+      expect(connection.received.whereType<JoinRejectedMessage>(), isEmpty);
+    });
+
     test('the displaced socket closing does not evict the new one', () {
       // This is the whole point of the guard: the dying socket's `onDone`
       // arrives *after* the reconnect, and must not take the seat with it.

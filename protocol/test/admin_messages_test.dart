@@ -187,6 +187,36 @@ void main() {
     });
   });
 
+  group('JoinRejection.displaced', () {
+    test('round trips through fromWireName', () {
+      expect(
+        JoinRejection.fromWireName('displaced'),
+        equals(JoinRejection.displaced),
+      );
+    });
+
+    test('survives a round trip inside a joinRejected', () {
+      const refusal = JoinRejectedMessage(
+        reason: JoinRejection.displaced,
+        detail: 'This event is now open in another tab.',
+      );
+
+      final decoded = decodeMessage(encodeMessage(refusal));
+
+      expect(decoded, isA<JoinRejectedMessage>());
+      expect(
+        (decoded as JoinRejectedMessage).reason,
+        equals(JoinRejection.displaced),
+      );
+    });
+
+    test('is its own reason, not the kick it resembles', () {
+      // Both stop the client retrying. Only one of them is a sanction, and
+      // the screens say opposite things.
+      expect(JoinRejection.displaced, isNot(equals(JoinRejection.kicked)));
+    });
+  });
+
   group('JoinRejection.worldFull', () {
     test('round trips through fromWireName', () {
       expect(
@@ -219,7 +249,7 @@ void main() {
       );
     });
 
-    test('the five older reasons are untouched', () {
+    test('the older reasons are untouched', () {
       expect(
         JoinRejection.values,
         containsAll(<JoinRejection>[
@@ -230,7 +260,7 @@ void main() {
           JoinRejection.maintenance,
         ]),
       );
-      expect(JoinRejection.values, hasLength(6));
+      expect(JoinRejection.values, hasLength(7));
     });
   });
 

@@ -191,6 +191,20 @@ enum AppStage {
   /// its config may not know yet.
   maintenance,
 
+  /// This device opened the world somewhere else, and that one holds the seat.
+  ///
+  /// The third stage that is not about anything the player did wrong, and the
+  /// only one caused by the player being *keen*: a second tab on the same
+  /// browser carries the same session id, so the server hands the seat to
+  /// whichever socket joined last and tells this one it has been let go.
+  ///
+  /// A stage rather than a toast over the world, because the socket really is
+  /// gone and a world screen with no socket is a frozen room. It has a way
+  /// back — one tap, which takes the seat off the other tab — and no timer
+  /// behind it, on purpose: two tabs that both retried on a schedule are the
+  /// eviction loop this whole stage exists to end.
+  displaced,
+
   /// Every seat in the world is taken.
   ///
   /// The second stage that is not about this player, and the one difference
@@ -433,6 +447,7 @@ class _AppFlowState extends State<AppFlow> {
         JoinRejection.kicked => AppStage.kicked,
         JoinRejection.maintenance => AppStage.maintenance,
         JoinRejection.worldFull => AppStage.full,
+        JoinRejection.displaced => AppStage.displaced,
         JoinRejection.invalidName ||
         JoinRejection.invalidSession => AppStage.setup,
       };
@@ -482,6 +497,25 @@ class _AppFlowState extends State<AppFlow> {
   /// button.
   Future<void> _rejoinFromFull() async {
     if (!mounted || _stage != AppStage.full) return;
+    setState(() {
+      _rejectionMessage = null;
+      _stage = _identity == null ? AppStage.setup : AppStage.world;
+    });
+  }
+
+  /// Takes the seat back after another tab on this device took it.
+  ///
+  /// Rejoining is all it takes: the socket this opens carries the same
+  /// session id, so the server re-seats the player here and displaces the
+  /// other tab — which lands on its own copy of this screen. The seat moves
+  /// to whichever tab asked most recently, which is the one the person is
+  /// actually looking at.
+  ///
+  /// Only ever called from a tap. That is the rule the fix rests on: a poll
+  /// here, of the kind [FullScreen] runs, would put both tabs back to
+  /// evicting each other on a timer.
+  void _rejoinFromDisplaced() {
+    if (_stage != AppStage.displaced) return;
     setState(() {
       _rejectionMessage = null;
       _stage = _identity == null ? AppStage.setup : AppStage.world;
@@ -545,6 +579,17 @@ class _AppFlowState extends State<AppFlow> {
       AppStage.full => FullScreen(
         message: _rejectionMessage,
         onRetry: _rejoinFromFull,
+      ),
+      AppStage.displaced => _RemovedScreen(
+        icon: Icons.tab_unselected,
+        iconColor: AppTheme.warn,
+        message:
+            _rejectionMessage ??
+            'This event is open in another tab or window on this device.',
+        footer: 'Only one can be connected at a time.',
+        hint: 'Continuing here will disconnect the other tab.',
+        retryLabel: 'Continue here',
+        onRetry: _rejoinFromDisplaced,
       ),
       AppStage.removed => _RemovedScreen(
         message:
@@ -688,9 +733,22 @@ class _RemovedScreen extends StatelessWidget {
     this.hint,
     this.note,
     this.onRetry,
+    this.icon = Icons.block,
+    this.iconColor = AppTheme.bad,
+    this.retryLabel = 'Try again',
   });
 
   final String message;
+
+  /// The mark at the top of the screen, and the tone of the whole thing.
+  ///
+  /// Parameterised for one case: being displaced by your own second tab is
+  /// not a sanction, and a red stop sign over it would tell somebody they had
+  /// been thrown out of an event they are still perfectly welcome at.
+  final IconData icon;
+
+  /// What colour [icon] is drawn in.
+  final Color iconColor;
 
   /// The quieter line under [message]: what happens next, or who to ask.
   final String footer;
@@ -714,6 +772,13 @@ class _RemovedScreen extends StatelessWidget {
   /// What to do when the player asks to come back, or `null` if they cannot.
   final VoidCallback? onRetry;
 
+  /// What the button says.
+  ///
+  /// "Try again" is the honest word for a knock at a door somebody else
+  /// controls — a ban, a kick. A displaced tab is not knocking: the seat is
+  /// its for the taking, so the button says what it will actually do.
+  final String retryLabel;
+
   @override
   Widget build(BuildContext context) {
     final supportEmail = this.supportEmail;
@@ -729,7 +794,7 @@ class _RemovedScreen extends StatelessWidget {
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
-                const Icon(Icons.block, size: 40, color: AppTheme.bad),
+                Icon(icon, size: 40, color: iconColor),
                 const SizedBox(height: 16),
                 Text(
                   message,
@@ -753,7 +818,7 @@ class _RemovedScreen extends StatelessWidget {
                   const SizedBox(height: 20),
                   FilledButton(
                     onPressed: onRetry,
-                    child: const Text('Try again'),
+                    child: Text(retryLabel),
                   ),
                 ],
                 if (note != null) ...[

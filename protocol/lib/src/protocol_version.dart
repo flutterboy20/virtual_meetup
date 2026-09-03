@@ -58,7 +58,22 @@
 /// moderation screen is served by the same deployment as the server it talks
 /// to, so a skew there is a half-finished deploy rather than a peer worth
 /// designing around.
-const int protocolVersion = 6;
+/// v7 added one value to `JoinRejection`: `displaced`, what a server says to
+/// the socket it is letting go of because the same session just joined on a
+/// newer one. No message grew a field and none was removed — as with v5, the
+/// whole change is one more string that can appear in a `joinRejected`'s
+/// `reason`.
+///
+/// A v6 peer is fine, in the only direction this can travel. `displaced` only
+/// ever goes server → client, and `JoinRejection.fromWireName` falls back to
+/// `invalidName`, so a v6 client displaced by a v7 server is sent back to
+/// setup. The wording is wrong and the behaviour is safe — and it still fixes
+/// the thing the value exists for, because a client sitting on the setup
+/// screen is a client that has stopped reconnecting into a fight with its own
+/// other tab. Nothing on the way *up* changed, so a v7 client on a v6 server
+/// is exactly as it was: no `displaced` is ever sent, and the two tabs go
+/// back to trading the seat.
+const int protocolVersion = 7;
 
 /// Returns a human-readable banner naming the protocol version.
 ///
