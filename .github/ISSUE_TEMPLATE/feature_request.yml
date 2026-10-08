@@ -1,0 +1,23 @@
+name: Feature request
+description: Suggest an idea for the walk-around world.
+labels: [enhancement]
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: The problem
+      description: What would this make possible or easier, and for whom?
+    validations:
+      required: true
+  - type: textarea
+    id: idea
+    attributes:
+      label: The idea
+    validations:
+      required: true
+  - type: markdown
+    attributes:
+      value: |
+        The server is a relay, not a simulator — it does not run movement
+        physics or validate positions. Ideas that need server-side authority
+        are a bigger conversation; say so if yours does.
