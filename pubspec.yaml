@@ -16,7 +16,7 @@ workspace:
   - tool/loadtest
 
 dev_dependencies:
-  melos: ^8.3.0
+  melos: ^8.9.0
 
 melos:
   # Melos generates IntelliJ run configs by default; we don't want IDE files
