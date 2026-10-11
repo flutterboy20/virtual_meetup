@@ -9,7 +9,7 @@ environment:
 resolution: workspace
 
 dependencies:
-  flame: ^1.38.0
+  flame: ^1.38.2
   flutter:
     sdk: flutter
   http: ^1.6.0
