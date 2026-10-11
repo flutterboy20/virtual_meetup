@@ -2,6 +2,8 @@ import 'dart:async';
 import 'dart:math' as math;
 
 import 'package:client/core/app_fonts.dart';
+import 'package:client/core/credits.dart';
+import 'package:client/core/open_link.dart';
 import 'package:client/core/share_link.dart';
 import 'package:client/core/theme.dart';
 import 'package:client/features/app_config/view_model/app_config_view_model.dart';
@@ -240,6 +242,9 @@ class _WelcomeScreenState extends State<WelcomeScreen>
 /// choice nobody came here to make. Quiet, but on the first screen — because
 /// the moment people share a thing like this is before they have walked in,
 /// while they are still deciding who else should be here.
+///
+/// Beside it, just as quiet, the way to find out what this place is: a link
+/// to the static about page, for whoever opened the link cold.
 class _ShareButton extends StatelessWidget {
   const _ShareButton({required this.worldName});
 
@@ -248,13 +253,28 @@ class _ShareButton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Align(
-      child: TextButton.icon(
-        onPressed: () => unawaited(shareApp(context, worldName: worldName)),
-        icon: const Icon(Icons.ios_share, size: 16),
-        label: const Text('Share this world'),
-        style: TextButton.styleFrom(foregroundColor: AppTheme.mutedInk),
-      ),
+    final style = TextButton.styleFrom(foregroundColor: AppTheme.mutedInk);
+
+    // About rides on the same line as Share, not under it: the front door was
+    // laid out to a set height, and the stack credit below is hidden on short
+    // screens, which is most phones. Wrap rather than Row so a narrow screen
+    // drops it to a second line instead of overflowing.
+    return Wrap(
+      alignment: WrapAlignment.center,
+      children: [
+        TextButton.icon(
+          onPressed: () => unawaited(shareApp(context, worldName: worldName)),
+          icon: const Icon(Icons.ios_share, size: 16),
+          label: const Text('Share this world'),
+          style: style,
+        ),
+        TextButton.icon(
+          onPressed: () => unawaited(openLink(Credits.aboutPath)),
+          icon: const Icon(Icons.info_outline, size: 16),
+          label: const Text('About'),
+          style: style,
+        ),
+      ],
     );
   }
 }

@@ -17,6 +17,13 @@ abstract final class Credits {
   /// Where to send somebody who taps the name itself.
   static const String authorUrl = 'https://ruhaan-dev.netlify.app/';
 
+  /// The static page that says what this is, linked from the front door.
+  ///
+  /// A path, not a URL: the same bundle is served on more than one hostname,
+  /// and the about page is whichever one the visitor is already on. The file
+  /// is `client/web/about.html`, copied into the build by Flutter itself.
+  static const String aboutPath = '/about.html';
+
   /// Where somebody a moderator removed is told to write.
   ///
   /// **A placeholder.** Deliberately not the maker addresses below: an appeal

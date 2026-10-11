@@ -1,5 +1,6 @@
 import 'package:client/app/app.dart';
 import 'package:client/core/credits.dart';
+import 'package:client/core/open_link.dart';
 import 'package:client/core/player_identity.dart';
 import 'package:client/core/share_link.dart';
 import 'package:client/core/sponsor.dart';
@@ -121,6 +122,24 @@ void main() {
 
       expect(shared, hasLength(1));
       expect(shared.single, contains(AppConfig.defaultWorldName));
+    });
+
+    testWidgets('links to the about page beside Share', (tester) async {
+      // Somebody who opened the link cold sees a name picker and nothing
+      // that says what this is. The about page is one tap away.
+      final realOpener = linkOpener;
+      addTearDown(() => linkOpener = realOpener);
+      final opened = <String>[];
+      linkOpener = (url) async => opened.add(url);
+
+      await pumpApp(tester);
+
+      expect(find.text('About'), findsOneWidget);
+
+      await tester.tap(find.text('About'));
+      await tester.pump();
+
+      expect(opened, [Credits.aboutPath]);
     });
 
     testWidgets('Join sends a new player to setup', (tester) async {
