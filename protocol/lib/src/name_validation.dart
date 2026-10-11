@@ -38,7 +38,7 @@ enum NameValidation {
   /// Matched the blocked-word list.
   blocked('blocked');
 
-  const NameValidation(this.wireName);
+  NameValidation(this.wireName);
 
   /// The string this verdict travels as.
   final String wireName;

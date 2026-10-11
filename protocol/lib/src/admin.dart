@@ -49,7 +49,7 @@ enum AdminAction {
   /// point of the ban being on.
   unban('unban');
 
-  const AdminAction(this.wireName);
+  AdminAction(this.wireName);
 
   /// The string this action travels as.
   final String wireName;
@@ -79,7 +79,7 @@ enum AdminError {
   /// The message did not carry what it needed to.
   badRequest('badRequest');
 
-  const AdminError(this.wireName);
+  AdminError(this.wireName);
 
   /// The string this reason travels as.
   final String wireName;

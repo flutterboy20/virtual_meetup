@@ -18,7 +18,7 @@ enum MapId {
   /// The beach: a boardwalk, a band of sand, and a swimmable sea.
   beach('beach', 'Beach');
 
-  const MapId(this.id, this.label);
+  MapId(this.id, this.label);
 
   /// The stable identifier this map travels as.
   final String id;

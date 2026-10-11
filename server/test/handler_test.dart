@@ -9,7 +9,7 @@ void main() {
   final handler = buildHandler();
 
   Future<Response> get(String path) async =>
-      handler(Request('GET', Uri.parse('http://localhost:8080$path')));
+      await handler(Request('GET', Uri.parse('http://localhost:8080$path')));
 
   group('buildHandler', () {
     test('GET /health returns 200 with the protocol banner', () async {
@@ -97,7 +97,7 @@ void main() {
       // a 400 from it, and only from it — so this proves the request
       // actually reached the admin handler.
       Future<Response> badUpgrade(Handler handler, String path) async =>
-          handler(
+          await handler(
             Request(
               'GET',
               Uri.parse('http://localhost:8080/$path'),

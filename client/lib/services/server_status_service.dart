@@ -86,7 +86,6 @@ class ServerUnreachable extends ServerStatus {
 // A service seam, not a function in a coat: the fake in the tests records
 // how many times it was asked, and the real one owns an HTTP client it has
 // to close.
-// ignore: one_member_abstracts
 abstract class ServerStatusService {
   /// Asks the server how many people are online.
   ///

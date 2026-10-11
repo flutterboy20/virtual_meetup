@@ -25,7 +25,7 @@ enum EmoteKind {
   /// 🎉
   party('party', '🎉');
 
-  const EmoteKind(this.wireName, this.glyph);
+  EmoteKind(this.wireName, this.glyph);
 
   /// The string written into a message's `emote` field.
   final String wireName;

@@ -965,7 +965,7 @@ class _EventPanelState extends State<_EventPanel> {
     // Seeded from the config, so extending a window keeps the sentence that
     // was already on screen instead of asking for it again.
     final notice = _noticeField..text = message;
-    return showDialog<({String message, bool showTimer})>(
+    return await showDialog<({String message, bool showTimer})>(
       context: context,
       builder: (context) => _ClosureDialog(
         until: until,

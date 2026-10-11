@@ -89,7 +89,7 @@ enum JoinRejection {
   /// *timer* must never make that decision.
   displaced('displaced');
 
-  const JoinRejection(this.wireName);
+  JoinRejection(this.wireName);
 
   /// The string this reason travels as.
   final String wireName;
