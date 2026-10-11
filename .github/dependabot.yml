@@ -20,3 +20,10 @@ updates:
     schedule:
       interval: weekly
     open-pull-requests-limit: 5
+    ignore:
+      # 11.0 switches the formatter to `trailing_commas: automate` and adds
+      # `unnecessary_type_name_in_constructor`: ~290 rewrites plus 82
+      # reformatted files. A style migration, not a bump. Revisit after
+      # FlutterCon India (21 Nov 2026). Patch and minor updates still come.
+      - dependency-name: very_good_analysis
+        update-types: ["version-update:semver-major"]
