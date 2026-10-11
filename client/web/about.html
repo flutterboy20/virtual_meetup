@@ -19,11 +19,9 @@
     :root {
       color-scheme: dark;
       --bg: #0b1a22;
-      --surface: #13252f;
       --ink: #eaf6fb;
       --muted: #9fb6c2;
       --good: #7ed9b6;
-      --warn: #ead37e;
       --line: rgba(234, 246, 251, 0.09);
     }
     * { box-sizing: border-box; }
@@ -88,25 +86,6 @@
     }
     ol { padding-left: 20px; }
     li + li { margin-top: 8px; }
-    .card {
-      padding: 16px 18px;
-      border: 1px solid var(--line);
-      border-radius: 16px;
-      background: var(--surface);
-    }
-    .card p { margin: 0; }
-    .card p + p { margin-top: 8px; }
-    .badge {
-      display: inline-block;
-      margin-left: 6px;
-      padding: 2px 8px;
-      border-radius: 999px;
-      background: rgba(234, 211, 126, 0.14);
-      color: var(--warn);
-      font-size: 12px;
-      font-weight: 700;
-      vertical-align: middle;
-    }
     footer {
       margin-top: 48px;
       padding-top: 16px;
@@ -144,19 +123,6 @@
         text and the sponsor booths are configuration, not code, so any meetup
         can reuse it.</li>
     </ol>
-
-    <h2>Built with Claude <span class="badge">Coming soon</span></h2>
-    <div class="card">
-      <p>
-        A moderator-only assistant that drafts the event's configuration (the
-        front-door text and booth blurbs) from a one-line brief, using Claude.
-      </p>
-      <p>
-        It will be off unless the server has an API key, attendees will never
-        see it, and nothing goes live until a moderator reviews the draft and
-        saves it.
-      </p>
-    </div>
 
     <h2>Open source</h2>
     <p>

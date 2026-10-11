@@ -106,7 +106,7 @@ docker compose logs -f
 Caddy obtains the certificate on its own. Then:
 
 ```bash
-curl https://your-host/health         # -> Hello from protocol v5
+curl https://your-host/health         # -> Hello from protocol v<N>
 curl https://your-host/metrics        # -> live numbers as JSON
 ```
 
@@ -120,19 +120,24 @@ cd client
 fvm flutter build web --release \
   --dart-define=SERVER_URL=wss://your-host/ws
 
-grep -c "localhost:8080" build/web/main.dart.js    # MUST print 0
+grep -c "wss://your-host/ws" build/web/main.dart.js    # MUST print 1 or more
 rsync -az --delete build/web/ user@host:/opt/virtual-conference/deploy/web/
 ```
 
 That grep is not paranoia. Forgetting the flag still builds, and ships a bundle
 that dials `ws://localhost:8080/ws` forever — the app loads, the art renders, the
-front door shows its built-in copy, and nobody can join.
+front door shows its built-in copy, and nobody can join. Check for your endpoint's
+*presence*, not for `localhost:8080`'s absence: that string is the fallback branch
+in `resolveServerUri` and stays in every bundle, flag or not.
 
 The GitHub Actions workflow (`.github/workflows/deploy.yml`) does all of the
-above and fails the build on that grep. It is `workflow_dispatch` only: a merge
+above and fails the build on that grep. It also refuses to redeploy the version
+already live (bump `version:` in `client/pubspec.yaml`), and waits for a
+reviewer's approval on the `production` environment before it touches the VM. It is `workflow_dispatch` only: a merge
 to main must never restart the server underneath a room full of people.
 
 Repository secrets it needs: `DEPLOY_HOST`, `DEPLOY_USER`, `DEPLOY_SSH_KEY`.
+Repository variable: `SITE_DOMAIN`, the one hostname baked into the bundle.
 Repository variable: `SITE_DOMAIN`. The admin token is **not** among them — it
 lives only on the VM.
 
