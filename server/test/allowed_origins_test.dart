@@ -144,7 +144,7 @@ void main() {
     Future<HttpClientResponse> get(String route, {String? origin}) async {
       final request = await HttpClient().getUrl(path(route));
       if (origin != null) request.headers.set('origin', origin);
-      return request.close();
+      return await request.close();
     }
 
     Future<WebSocketChannel> socket(String route, {String? origin}) async {

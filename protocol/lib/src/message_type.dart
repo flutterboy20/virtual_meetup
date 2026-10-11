@@ -170,7 +170,7 @@ enum MessageType {
   /// slightly out of step without a hard break.
   unknown('unknown');
 
-  const MessageType(this.wireName);
+  MessageType(this.wireName);
 
   /// The string written into the message's `type` field.
   final String wireName;

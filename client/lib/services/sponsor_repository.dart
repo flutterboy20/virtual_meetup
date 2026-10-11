@@ -11,7 +11,6 @@ import 'package:protocol/protocol.dart';
 /// swap the bundled file for a fetched one without the world knowing.
 // One method is the point: this is the seam that lets a test — and a later
 // fetched implementation — stand in for the bundled file.
-// ignore: one_member_abstracts
 abstract class SponsorRepository {
   /// Returns every booth to place in the world.
   Future<List<Sponsor>> load();
@@ -72,7 +71,7 @@ class ConfigSponsorRepository implements SponsorRepository {
   @override
   Future<List<Sponsor>> load() async {
     final entries = config.sponsors;
-    if (entries.isEmpty) return fallback.load();
+    if (entries.isEmpty) return await fallback.load();
     return readSponsors(entries);
   }
 }

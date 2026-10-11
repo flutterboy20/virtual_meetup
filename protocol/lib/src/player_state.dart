@@ -40,7 +40,7 @@ enum PlayerCosmetic {
   /// A beanie with a two-blade propeller on top.
   propellerBeanie('propellerBeanie');
 
-  const PlayerCosmetic(this.wireName);
+  PlayerCosmetic(this.wireName);
 
   /// The string written into a message's `cosmetic` field.
   final String wireName;

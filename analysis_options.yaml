@@ -3,6 +3,19 @@
 # so there is exactly one place to change the rules.
 include: package:very_good_analysis/analysis_options.yaml
 
+# very_good_analysis 11 switched the formatter to `trailing_commas: automate`.
+# Keep 10.x's `preserve`: hand-placed trailing commas stay, and adopting 11
+# does not reformat 82 files.
+formatter:
+  trailing_commas: preserve
+
+linter:
+  rules:
+    # New in very_good_analysis 11. Its fix rewrites every `Foo(...)`
+    # constructor to the `new(...)` shorthand: ~270 sites of pure style churn.
+    # Revisit as its own change, not inside a dependency bump.
+    unnecessary_type_name_in_constructor: false
+
 analyzer:
   exclude:
     - "**/build/**"

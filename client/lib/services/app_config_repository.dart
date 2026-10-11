@@ -11,7 +11,6 @@ import 'package:protocol/protocol.dart';
 /// the second one changed nothing above this line.
 // One method is the point: this is the seam a fetched implementation and a
 // test both stand in at.
-// ignore: one_member_abstracts
 abstract class AppConfigRepository {
   /// Returns the app's configuration.
   ///

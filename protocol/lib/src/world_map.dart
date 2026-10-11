@@ -237,7 +237,7 @@ enum WorldZone {
     map: MapId.beach,
   );
 
-  const WorldZone(
+  WorldZone(
     this.id,
     this.label,
     this.rect, {
