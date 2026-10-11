@@ -22,7 +22,7 @@ dependencies:
   web_socket_channel: ^3.0.3
 
 dev_dependencies:
-  flame_test: ^2.3.0
+  flame_test: ^2.3.1
   flutter_test:
     sdk: flutter
   shared_preferences_platform_interface: ^2.4.2
