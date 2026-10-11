@@ -1,0 +1,178 @@
+<!DOCTYPE html>
+<!--
+  The about page. Static on purpose: the app's root is the game, and someone
+  opening the domain cold needs one page that says what this is without
+  loading a game engine first.
+
+  No JavaScript, no external fonts, no analytics, no request to any other
+  host. `flutter build web` copies this file into build/web/, and Caddy's
+  `try_files {path} /index.html` serves it because it exists.
+-->
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="Virtual Meetup is an open-source, browser-based multiplayer world for conferences and meetups.">
+  <title>About · Virtual Meetup</title>
+  <link rel="icon" type="image/png" href="favicon.png">
+  <style>
+    :root {
+      color-scheme: dark;
+      --bg: #0b1a22;
+      --surface: #13252f;
+      --ink: #eaf6fb;
+      --muted: #9fb6c2;
+      --good: #7ed9b6;
+      --warn: #ead37e;
+      --line: rgba(234, 246, 251, 0.09);
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      background: var(--bg);
+      color: var(--ink);
+      font: 16px/1.6 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+    }
+    main {
+      max-width: 640px;
+      margin: 0 auto;
+      padding: 40px 16px 56px;
+    }
+    .eyebrow {
+      margin: 0 0 8px;
+      color: var(--muted);
+      font-size: 12px;
+      font-weight: 700;
+      letter-spacing: 0.14em;
+      text-transform: uppercase;
+    }
+    h1 {
+      margin: 0 0 12px;
+      font-size: clamp(32px, 9vw, 44px);
+      line-height: 1.1;
+      letter-spacing: -0.02em;
+    }
+    h2 {
+      margin: 40px 0 8px;
+      font-size: 20px;
+    }
+    p, li { color: var(--muted); }
+    strong { color: var(--ink); }
+    a { color: var(--good); }
+    .lead { font-size: 18px; }
+    .cta {
+      display: inline-block;
+      margin-top: 8px;
+      padding: 12px 22px;
+      border-radius: 999px;
+      background: #4fc3f7;
+      color: #0b1a22;
+      font-weight: 700;
+      text-decoration: none;
+    }
+    figure { margin: 32px 0 0; }
+    figure img {
+      display: block;
+      width: 100%;
+      max-width: 300px;
+      height: auto;
+      margin: 0 auto;
+      border: 1px solid var(--line);
+      border-radius: 24px;
+    }
+    figcaption {
+      margin-top: 8px;
+      color: var(--muted);
+      font-size: 13px;
+      text-align: center;
+    }
+    ol { padding-left: 20px; }
+    li + li { margin-top: 8px; }
+    .card {
+      padding: 16px 18px;
+      border: 1px solid var(--line);
+      border-radius: 16px;
+      background: var(--surface);
+    }
+    .card p { margin: 0; }
+    .card p + p { margin-top: 8px; }
+    .badge {
+      display: inline-block;
+      margin-left: 6px;
+      padding: 2px 8px;
+      border-radius: 999px;
+      background: rgba(234, 211, 126, 0.14);
+      color: var(--warn);
+      font-size: 12px;
+      font-weight: 700;
+      vertical-align: middle;
+    }
+    footer {
+      margin-top: 48px;
+      padding-top: 16px;
+      border-top: 1px solid var(--line);
+      color: var(--muted);
+      font-size: 14px;
+    }
+  </style>
+</head>
+<body>
+  <main>
+    <p class="eyebrow">About</p>
+    <h1>Virtual Meetup</h1>
+    <p class="lead">
+      A browser-based, multiplayer walk-around world for any conference or
+      meetup. Open a link on your phone, pick a character, and roam one shared
+      map with everyone else in the room.
+    </p>
+    <a class="cta" href="/">Walk in</a>
+
+    <figure>
+      <img src="about-front-door.webp" width="390" height="844"
+           alt="The Virtual Meetup front door on a phone: the title, a row of animated bean characters, a map picker and a Join button.">
+      <figcaption>The front door, on a phone.</figcaption>
+    </figure>
+
+    <h2>How it works</h2>
+    <ol>
+      <li><strong>Pick a name and a bean.</strong> No sign-up and no app to
+        install. It runs in the browser you already have.</li>
+      <li><strong>Walk around.</strong> Your phone sends its own position to a
+        small Dart relay server, which passes it on only to the people near
+        you. That is how a few hundred people share one map.</li>
+      <li><strong>Make it your event's.</strong> The event name, the front-door
+        text and the sponsor booths are configuration, not code, so any meetup
+        can reuse it.</li>
+    </ol>
+
+    <h2>Built with Claude <span class="badge">Coming soon</span></h2>
+    <div class="card">
+      <p>
+        A moderator-only assistant that drafts the event's configuration (the
+        front-door text and booth blurbs) from a one-line brief, using Claude.
+      </p>
+      <p>
+        It will be off unless the server has an API key, attendees will never
+        see it, and nothing goes live until a moderator reviews the draft and
+        saves it.
+      </p>
+    </div>
+
+    <h2>Open source</h2>
+    <p>
+      Flutter and Flame in the browser, a Dart relay on the server, MIT
+      licensed. The code, the design notes and the load-test numbers are all on
+      <a href="https://github.com/flutterboy20/virtual_meetup">GitHub</a>.
+    </p>
+
+    <h2>Contact</h2>
+    <p>
+      <a href="mailto:hello@virtualmeetup.dev">hello@virtualmeetup.dev</a>
+    </p>
+
+    <footer>
+      Made by Ruhaan · <a href="/">Back to the world</a>
+    </footer>
+  </main>
+</body>
+</html>

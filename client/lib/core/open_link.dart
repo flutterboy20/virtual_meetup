@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart' show visibleForTesting;
 import 'package:url_launcher/url_launcher.dart';
 
 /// Opens [url] in whatever the platform thinks should handle it.
@@ -10,7 +11,17 @@ import 'package:url_launcher/url_launcher.dart';
 ///
 /// In `core/` rather than in one feature because two screens now open links
 /// and neither should have to import the other to do it.
-Future<void> openLink(String url) async {
+Future<void> openLink(String url) => linkOpener(url);
+
+/// What [openLink] actually calls.
+///
+/// A function-shaped seam, like `shareSheet`, so a widget test can watch a
+/// link button do its job without a platform channel underneath it.
+/// Production never reassigns it.
+@visibleForTesting
+Future<void> Function(String url) linkOpener = _launchExternally;
+
+Future<void> _launchExternally(String url) async {
   try {
     await launchUrl(
       Uri.parse(url),
