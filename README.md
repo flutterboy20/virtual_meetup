@@ -7,10 +7,19 @@ the room. The event's name and front-door copy are config, not code.
 [![CI](https://github.com/flutterboy20/virtual_meetup/actions/workflows/ci.yml/badge.svg)](https://github.com/flutterboy20/virtual_meetup/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 
-> **Status:** feature-complete and hardened. Not yet deployed.
+**Live at [virtualmeetup.dev](https://virtualmeetup.dev)**: open it on your phone and walk
+in. What it is, in one page: [virtualmeetup.dev/about.html](https://virtualmeetup.dev/about.html).
+
+<p align="center">
+  <img src="docs/screenshots/front-door.webp" width="260" alt="The front door on a phone: title, animated beans, live head count, map picker and Join button.">
+  &nbsp;&nbsp;
+  <img src="docs/screenshots/world.webp" width="260" alt="Inside the world on a phone: beans with nametags in the atrium, the minimap, the joystick and the emote button.">
+</p>
+
+> **Status:** feature-complete, hardened and deployed.
 >
-> Five themed zones in a cross, static collision, sponsor booths driven by config,
-> proximity nametags, emotes, a minimap and a live head count. Moderation is built —
+> Two maps (a seven-zone conference venue and a beach), static collision, sponsor
+> booths driven by config, proximity nametags, emotes, a minimap and a live head count. Moderation is built —
 > mute, kick and ban behind a token, with an audit log. The relay culls with a spatial
 > grid on a tuned 15Hz tick with a nearest-N neighbour cap on top
 > (see [Measured load](#measured-load)), and holds up to 300 concurrent clients with
@@ -18,32 +27,44 @@ the room. The event's name and front-door copy are config, not code.
 >
 > Hardened for a public URL: admission control at the HTTP upgrade, per-socket size
 > and rate limits before decode, join deadlines, and origin pinning that fails closed.
-> The deployment stack — Docker, Caddy, one origin for app and socket — is written and
-> lives in [`deploy/`](deploy/). The public URL is the last piece.
+> The deployment stack — Docker, Caddy, one origin for app and socket — lives in
+> [`deploy/`](deploy/) and runs on a single small cloud VM, shipped by a manual GitHub
+> Actions workflow that waits for a human approval before it touches the server.
 
 ## The world
 
-A **cross**, not a maze. Five zones meet along walkways as wide as the rooms
-themselves, because two hundred people funnelled through a doorway is a jam.
+Two maps, picked on the front door.
+
+**Conference** is a **cross with two filled corners**, not a maze. Seven zones meet
+along walkways as wide as the rooms themselves, because two hundred people funnelled
+through a doorway is a jam.
 
 ```
-                    +-------------+
-                    |  CONFERENCE |     stage, screen, seat rows
-                    |     HALL    |
       +-------------+-------------+-------------+
-      |   PHOTO     |   ATRIUM    |   SPONSOR   |
-      |    WALL     |  (spawn)    |     ROW     |   booths from config
+      |             |  CONFERENCE |   CODE LAB  |     desks, projector, whiteboard
+      |             |     HALL    |             |
       +-------------+-------------+-------------+
-                    |   LOUNGE    |     pool, loungers
-                    |   & POOL    |
-                    +-------------+
+      |    FOOD     |   ATRIUM    |   SPONSOR   |
+      |    COURT    |   (spawn)   |     ROW     |     booths from config
+      +-------------+-------------+-------------+
+      |   GARDEN    |   LOUNGE    |             |
+      |    DECK     |   & POOL    |             |
+      +-------------+-------------+-------------+
 ```
 
-- **Atrium** — everybody spawns here, on a ring around the credit pillar.
+- **Atrium** — everybody spawns here.
 - **Conference hall** — the stage and its seating.
+- **Code lab** — desk rows, a projector and a whiteboard.
 - **Sponsor row** — booths; walk up to one and its panel opens.
+- **Food court** — stalls, a snack cart and a gather-here counter.
+- **Garden deck** — lawn, trees, a fountain and a stepped deck looking over the pool.
 - **Lounge & pool** — the chill zone.
-- **Photo wall** — a "gather here" beacon that brightens as people stand on it.
+
+The two empty corners stay empty on purpose: a social toy dies when you can walk ten
+seconds without passing anyone.
+
+**Beach** is a boardwalk, a band of sand and a swimmable sea. Each map is its own
+room on the server: you only see the people on the map you picked.
 
 All of it is drawn from vector shapes in code. There is not one image in the bundle —
 every prop, bean and floor tile is a path — because every image is cold-load time on
@@ -88,7 +109,7 @@ Run the server:
 ```bash
 cd server
 ALLOWED_ORIGINS='*' fvm dart run bin/server.dart   # listens on :8080
-curl localhost:8080/health                         # -> Hello from protocol v5
+curl localhost:8080/health                         # -> Hello from protocol v<N>
 curl localhost:8080/metrics                        # -> live load numbers as JSON
 ```
 
@@ -184,7 +205,7 @@ fvm exec dart run melos run ci --no-select   # format + analyze + test, everythi
 |--------------|--------|----------------------------|---------|
 | `PORT`       | server | `8080`                     | TCP port the server listens on |
 | `CELL_SIZE`  | server | `320`                      | Interest grid cell edge, in world units. Each client is sent the players in its own cell plus the eight around it. |
-| `SERVER_URL` | client | `ws://localhost:8080/ws`   | WebSocket endpoint, passed at build time as `--dart-define=SERVER_URL=…`. Production will be `wss://`. The welcome screen's online count is read over HTTP from the same host. |
+| `SERVER_URL` | client | `ws://localhost:8080/ws`   | WebSocket endpoint, passed at build time as `--dart-define=SERVER_URL=…`. Production is `wss://`, e.g. `wss://virtualmeetup.dev/ws`. The welcome screen's online count is read over HTTP from the same host. |
 | `SESSION_LINGER_SECONDS` | server | `90` | How long a disconnected player's seat is held for their return. `0` disables it, so every reconnect is a new player at a new spawn point. |
 | `NEIGHBOUR_CAP` | server | `40` | The most neighbours one snapshot may carry. A hard limit on top of the grid, for when everybody stands in the same cell. |
 | `ADMIN_TOKEN` | server | *(unset)* | The shared secret for the moderation screen. **Unset means moderation is switched off**, not open — every admin message is refused. At least 16 characters; the server refuses to start with a shorter one. Never commit a value. |
