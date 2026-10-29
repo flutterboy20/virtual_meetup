@@ -2,6 +2,8 @@ import 'dart:math' as math;
 import 'dart:ui';
 
 import 'package:client/core/world_palette.dart';
+import 'package:client/game/diorama_art.dart';
+import 'package:client/game/world_layout.dart';
 import 'package:protocol/protocol.dart';
 
 /// The texture painted on each zone's floor.
@@ -112,20 +114,7 @@ abstract final class ZoneFloorArt {
 
   static void _atrium(Canvas canvas, Rect rect, ZoneColors colors) {
     const step = tile * 1.25; // 80: exactly five tiles across the atrium.
-    final light = Paint()..color = _shade(colors.floor, 0.045);
-    final dark = Paint()..color = _shade(colors.floor, -0.035);
-    var row = 0;
-    for (var y = rect.top; y < rect.bottom; y += step) {
-      var col = 0;
-      for (var x = rect.left; x < rect.right; x += step) {
-        canvas.drawRect(
-          Rect.fromLTWH(x, y, step, step),
-          (row + col).isEven ? light : dark,
-        );
-        col++;
-      }
-      row++;
-    }
+    _checker(canvas, rect, step, colors, light: 0.045, dark: -0.035);
     _grout(canvas, rect, step, colors);
 
     // A medallion under the credit pillar. The pillar itself is furniture and
@@ -151,6 +140,7 @@ abstract final class ZoneFloorArt {
           ..style = PaintingStyle.stroke
           ..strokeWidth = 2,
       );
+    _compass(canvas, centre, accent);
 
     // Wayfinding painted on the floor, pointing at each of the four arms.
     // The atrium is the only room where somebody genuinely does not know
@@ -160,6 +150,73 @@ abstract final class ZoneFloorArt {
     _chevron(canvas, Offset(centre.dx, rect.bottom - 74), math.pi / 2, accent);
     _chevron(canvas, Offset(rect.left + 74, centre.dy), math.pi, accent);
     _chevron(canvas, Offset(rect.right - 74, centre.dy), 0, accent);
+  }
+
+  /// How far the compass rose's long points reach from the centre.
+  ///
+  /// Inside the medallion's inner ring (112), so the rose sits in the inlay
+  /// rather than across its border.
+  static const double compassPoint = 100;
+
+  /// The radius of the compass ring, outside the medallion.
+  static const double compassRing = 176;
+
+  /// A compass rose under the pillar, and a ring of ticks around the inlay.
+  ///
+  /// Each point is two triangles, the north-west half lighter than the
+  /// other: lit from the same corner every shadow in the world is cast
+  /// from, which is what makes a flat inlay read as a carved one.
+  static void _compass(Canvas canvas, Offset centre, Color accent) {
+    final lit = Path();
+    final shaded = Path();
+    for (var i = 0; i < 8; i++) {
+      final angle = i * math.pi / 4 - math.pi / 2;
+      final length = i.isEven ? compassPoint : compassPoint * 0.62;
+      final half = i.isEven ? 20.0 : 13.0;
+      final tip = centre + Offset.fromDirection(angle, length);
+      final left = centre + Offset.fromDirection(angle - math.pi / 2, half);
+      final right = centre + Offset.fromDirection(angle + math.pi / 2, half);
+      // Which side faces the north-west light: the side whose outward
+      // direction points against the light's travel (+x, +y).
+      final leftFacesLight = (left - centre).dx + (left - centre).dy < 0;
+      (leftFacesLight ? lit : shaded).addPolygon([centre, left, tip], true);
+      (leftFacesLight ? shaded : lit).addPolygon([centre, right, tip], true);
+    }
+    canvas
+      ..drawPath(shaded, Paint()..color = _alpha(accent, 0.28))
+      ..drawPath(lit, Paint()..color = _alpha(accent, 0.11))
+      ..drawCircle(
+        centre,
+        compassRing,
+        Paint()
+          ..color = _alpha(accent, 0.20)
+          ..style = PaintingStyle.stroke
+          ..strokeWidth = 4,
+      );
+
+    // Ticks inside the ring: long at the eight points of the rose, short
+    // between. One path, one draw call.
+    final ticks = Path();
+    for (var i = 0; i < 32; i++) {
+      final angle = i * math.pi / 16 - math.pi / 2;
+      final inner = compassRing - (i.isEven ? 14 : 7);
+      ticks
+        ..moveTo(
+          centre.dx + math.cos(angle) * inner,
+          centre.dy + math.sin(angle) * inner,
+        )
+        ..lineTo(
+          centre.dx + math.cos(angle) * (compassRing - 3),
+          centre.dy + math.sin(angle) * (compassRing - 3),
+        );
+    }
+    canvas.drawPath(
+      ticks,
+      Paint()
+        ..color = _alpha(accent, 0.22)
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = 2,
+    );
   }
 
   // ---- Hall: carpet weave, a centre runner, and a stage apron rug ---------
@@ -176,6 +233,21 @@ abstract final class ZoneFloorArt {
       rect.bottom,
     );
     _rug(canvas, runner, colors, fill: 0.10, border: 0.26);
+    // A row of diamonds down the middle of it, the pattern a conference
+    // runner is woven with. One path, so a hundred diamonds are one draw.
+    final diamonds = Path();
+    for (var y = runner.top + 24; y < runner.bottom - 12; y += 32) {
+      diamonds.addPolygon([
+        Offset(runner.center.dx, y - 9),
+        Offset(runner.center.dx + 8, y),
+        Offset(runner.center.dx, y + 9),
+        Offset(runner.center.dx - 8, y),
+      ], true);
+    }
+    canvas.drawPath(
+      diamonds,
+      Paint()..color = _alpha(colors.accent, 0.20),
+    );
 
     // The apron in front of the stage, where a speaker actually stands.
     _rug(
@@ -187,24 +259,33 @@ abstract final class ZoneFloorArt {
     );
   }
 
-  // ---- Sponsor row: expo carpet, an aisle runner, bay dividers ------------
+  // ---- Sponsor row: expo checker, an aisle runner, bay dividers -----------
+
+  /// The side of one square of the sponsor row's checker, in world units.
+  ///
+  /// Divides the arm both ways, so no square is cut at a wall.
+  static const double expoSquare = 50;
 
   static void _sponsorRow(Canvas canvas, Rect rect, ZoneColors colors) {
-    _weave(canvas, rect, colors, spacing: 12, strength: 0.035);
+    _checker(canvas, rect, expoSquare, colors, light: 0.03, dark: -0.025);
+    _grout(canvas, rect, expoSquare, colors, strength: 0.7);
 
     // The aisle runs the length of the arm, between the two booth rows.
-    _rug(
-      canvas,
-      Rect.fromLTRB(
-        rect.left,
-        rect.center.dy - 30,
-        rect.right - 30,
-        rect.center.dy + 30,
-      ),
-      colors,
-      fill: 0.09,
-      border: 0.22,
+    final aisle = Rect.fromLTRB(
+      rect.left,
+      rect.center.dy - 30,
+      rect.right - 30,
+      rect.center.dy + 30,
     );
+    _rug(canvas, aisle, colors, fill: 0.09, border: 0.22);
+    // A dashed centre line, the way an expo floor marks its walkway.
+    final dashes = Path();
+    for (var x = aisle.left + 10; x < aisle.right - 30; x += 40) {
+      dashes.addRect(
+        Rect.fromLTWH(x, aisle.center.dy - 2, 20, 4),
+      );
+    }
+    canvas.drawPath(dashes, Paint()..color = const Color(0x59FFFFFF));
 
     // Bay dividers: a stand's worth of floor, marked out the way an expo hall
     // marks it out with tape.
@@ -249,50 +330,100 @@ abstract final class ZoneFloorArt {
     }
   }
 
-  // ---- Food court: staggered street paving --------------------------------
+  // ---- Food court: terracotta tiles ---------------------------------------
 
+  /// The side of one terracotta tile, in world units.
+  ///
+  /// Divides the court both ways, so no tile is cut at a wall.
+  static const double terracottaTile = 50;
+
+  /// Square fired-clay tiles, every one a slightly different tone, each with
+  /// a lit north-west edge.
+  ///
+  /// The lit edge is the paper diorama's light again: a tile laid a little
+  /// proud of its grout catches the sun on the two edges facing it. All the
+  /// edges are one path and all the joints are one grid, so ninety-six tiles
+  /// cost ninety-six fills and three more draws, not three hundred.
   static void _foodCourt(Canvas canvas, Rect rect, ZoneColors colors) {
-    const paverWidth = 75.0;
-    const paverHeight = 50.0;
-    final joint = Paint()
-      ..color = _alpha(_shade(colors.floor, -0.34), 0.5)
-      ..style = PaintingStyle.stroke
-      ..strokeWidth = 1.6;
+    const size = terracottaTile;
+    final edges = Path();
     var index = 0;
-    var row = 0;
-    for (var y = rect.top; y < rect.bottom; y += paverHeight) {
-      // Every other course is offset by half a paver — a running bond, which
-      // is what a street outside a tea stall is actually laid in.
-      final start = rect.left - (row.isEven ? 0 : paverWidth / 2);
-      for (var x = start; x < rect.right; x += paverWidth) {
-        final tone = (_noise(index) - 0.5) * 0.06;
-        final paver = Rect.fromLTWH(x, y, paverWidth, paverHeight).deflate(1.2);
-        canvas
-          ..drawRect(paver, Paint()..color = _shade(colors.floor, tone))
-          ..drawRect(paver, joint);
+    for (var y = rect.top; y < rect.bottom; y += size) {
+      for (var x = rect.left; x < rect.right; x += size) {
+        // Deterministic per-tile tone: fired clay is never one colour.
+        final tone = (_noise(index) - 0.5) * 0.07;
+        canvas.drawRect(
+          Rect.fromLTWH(x, y, size, size),
+          Paint()..color = _shade(colors.floor, tone),
+        );
+        edges
+          ..moveTo(x + 2, y + size - 3)
+          ..lineTo(x + 2, y + 2)
+          ..lineTo(x + size - 3, y + 2);
         index++;
       }
-      row++;
+    }
+    canvas.drawPath(
+      edges,
+      Paint()
+        ..color = _alpha(_shade(colors.floor, 0.45), 0.55)
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = 1.4,
+    );
+    final joint = Paint()
+      ..color = _alpha(_shade(colors.floor, -0.34), 0.5)
+      ..strokeWidth = 2;
+    for (var x = rect.left + size; x < rect.right; x += size) {
+      canvas.drawLine(Offset(x, rect.top), Offset(x, rect.bottom), joint);
+    }
+    for (var y = rect.top + size; y < rect.bottom; y += size) {
+      canvas.drawLine(Offset(rect.left, y), Offset(rect.right, y), joint);
     }
   }
 
-  // ---- Code lab: raised anti-static floor ---------------------------------
+  // ---- Code lab: carpet tiles ---------------------------------------------
+
+  /// Whether the carpet tile in [column], [row] has its pile running north
+  /// to south (the other way is east to west).
+  ///
+  /// Alternating, like a checker: carpet tiles laid "quarter-turned", which
+  /// is how an office floor is actually fitted, and the one thing that makes
+  /// tiles read as tiles rather than as one carpet with lines on it.
+  static bool carpetRunsVertically(int column, int row) =>
+      (column + row).isEven;
 
   static void _codeLab(Canvas canvas, Rect rect, ZoneColors colors) {
-    // The fine conductive weave, then the panel joints on top of it: a raised
-    // computer-room floor is two grids at two scales, and drawing only the
-    // coarse one reads as graph paper.
-    _weave(canvas, rect, colors, spacing: 16, strength: 0.03);
-    _grout(canvas, rect, tile, colors, strength: 0.42);
-
-    // The lifting sockets at each panel corner. Tiny, and the single detail
-    // that says "this floor is panels" rather than "this floor has lines".
-    final socket = Paint()..color = _alpha(colors.accent, 0.20);
-    for (var y = rect.top + tile; y < rect.bottom; y += tile) {
-      for (var x = rect.left + tile; x < rect.right; x += tile) {
-        canvas.drawCircle(Offset(x, y), 2.2, socket);
+    // Every stripe of every tile in two paths, one per direction: two draw
+    // calls for the whole room, whatever its size.
+    final vertical = Path();
+    final horizontal = Path();
+    var row = 0;
+    for (var y = rect.top; y < rect.bottom; y += tile) {
+      var column = 0;
+      for (var x = rect.left; x < rect.right; x += tile) {
+        for (var i = 6.0; i < tile; i += 8) {
+          if (carpetRunsVertically(column, row)) {
+            vertical
+              ..moveTo(x + i, y + 2)
+              ..lineTo(x + i, y + tile - 2);
+          } else {
+            horizontal
+              ..moveTo(x + 2, y + i)
+              ..lineTo(x + tile - 2, y + i);
+          }
+        }
+        column++;
       }
+      row++;
     }
+    final pile = Paint()
+      ..color = _shade(colors.floor, -0.06)
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 1.5;
+    canvas
+      ..drawPath(vertical, pile)
+      ..drawPath(horizontal, pile);
+    _grout(canvas, rect, tile, colors, strength: 0.5);
   }
 
   // ---- Garden: mown stripes, tufts, and a paved walk ----------------------
@@ -327,10 +458,39 @@ abstract final class ZoneFloorArt {
       }
     }
 
+    // Clover and daisies: specks of two tones on a jittered lattice, as two
+    // `drawPoints` calls. What turns mown stripes into a lawn.
+    final dark = <Offset>[];
+    final pale = <Offset>[];
+    for (var i = 0; i < 360; i++) {
+      final at = Offset(
+        rect.left + _noise(i + 2000) * rect.width,
+        rect.top + _noise(i + 3000) * rect.height,
+      );
+      (i.isEven ? dark : pale).add(at);
+    }
+    canvas
+      ..drawPoints(
+        PointMode.points,
+        dark,
+        Paint()
+          ..color = _alpha(_shade(colors.floor, -0.30), 0.35)
+          ..strokeWidth = 2.6
+          ..strokeCap = StrokeCap.round,
+      )
+      ..drawPoints(
+        PointMode.points,
+        pale,
+        Paint()
+          ..color = const Color(0x47FFFFE6)
+          ..strokeWidth = 2.2
+          ..strokeCap = StrokeCap.round,
+      );
+
     // The walk in from the food court. It exists so the stepped deck at the
     // far end has something leading to it — stairs you arrive at by accident
     // read as decoration.
-    final path = Rect.fromLTRB(248, rect.top, 332, rect.bottom - 96);
+    final path = gardenWalk(rect);
     canvas.drawRect(path, Paint()..color = _shade(colors.floor, 0.16));
     final slab = Paint()
       ..color = _alpha(_shade(colors.floor, -0.22), 0.45)
@@ -338,6 +498,101 @@ abstract final class ZoneFloorArt {
     for (var y = rect.top + 42; y < path.bottom; y += 42) {
       canvas.drawLine(Offset(path.left, y), Offset(path.right, y), slab);
     }
+
+    _gravel(canvas);
+
+    // Stepping stones across the lawn: fountain to walk, walk to deck. Each
+    // sits a little proud of the grass, so it casts the world's shadow.
+    for (final stone in steppingStones(rect)) {
+      final oval = Rect.fromCenter(
+        center: stone,
+        width: stoneRadius * 2,
+        height: stoneRadius * 1.5,
+      );
+      canvas
+        ..drawOval(
+          oval.shift(DioramaArt.shadowSlope * 2.5),
+          Paint()..color = DioramaArt.shadowColor,
+        )
+        ..drawOval(oval, Paint()..color = const Color(0xFFDCD2BC));
+    }
+  }
+
+  /// The paved walk in from the food court, inside the garden's [rect].
+  static Rect gardenWalk(Rect rect) =>
+      Rect.fromLTRB(248, rect.top, 332, rect.bottom - 96);
+
+  /// How far the gravel round the fountain reaches from its centre.
+  ///
+  /// Wider than the basin, which stands on it, and short of the walk.
+  static const double gravelRadius = 72;
+
+  /// How wide a stepping stone is from its centre, east to west.
+  static const double stoneRadius = 10;
+
+  /// How far apart stepping stones are, centre to centre.
+  static const double stonePitch = 22;
+
+  /// Where the stepping stones lie in the garden at [rect], west to east.
+  ///
+  /// One line at the fountain's height, in the two stretches of lawn it
+  /// crosses: between the gravel and the walk, and between the walk and the
+  /// deck. As many stones as fit each stretch, centred in it, so none sits
+  /// half on the paving or half under a step.
+  static List<Offset> steppingStones(Rect rect) {
+    final walk = gardenWalk(rect);
+    final y = WorldLayout.fountain.y;
+    final stretches = [
+      (WorldLayout.fountain.x + gravelRadius, walk.left),
+      (walk.right, WorldLayout.gardenDeck.left),
+    ];
+    final stones = <Offset>[];
+    for (final (from, to) in stretches) {
+      final count = ((to - from) / stonePitch).floor();
+      final start = from + ((to - from) - count * stonePitch) / 2;
+      for (var i = 0; i < count; i++) {
+        stones.add(Offset(start + stonePitch * (i + 0.5), y));
+      }
+    }
+    return stones;
+  }
+
+  /// A disc of pale gravel the fountain stands in, with its pebbles.
+  static void _gravel(Canvas canvas) {
+    final centre = Offset(WorldLayout.fountain.x, WorldLayout.fountain.y);
+    canvas.drawCircle(
+      centre,
+      gravelRadius,
+      Paint()..color = const Color(0xFFE3D9C2),
+    );
+    // Only the ring outside the basin: the basin covers the rest.
+    final pebbles = <Offset>[
+      for (var i = 0; i < 160; i++)
+        centre +
+            Offset.fromDirection(
+              _noise(i + 4000) * 2 * math.pi,
+              WorldLayout.fountain.radius +
+                  _noise(i + 5000) *
+                      (gravelRadius - WorldLayout.fountain.radius - 2),
+            ),
+    ];
+    canvas
+      ..drawPoints(
+        PointMode.points,
+        pebbles,
+        Paint()
+          ..color = const Color(0x408C7A57)
+          ..strokeWidth = 2.4
+          ..strokeCap = StrokeCap.round,
+      )
+      ..drawCircle(
+        centre,
+        gravelRadius,
+        Paint()
+          ..color = const Color(0x338C7A57)
+          ..style = PaintingStyle.stroke
+          ..strokeWidth = 2,
+      );
   }
 
   // ---- Shared texture primitives -----------------------------------------
@@ -361,6 +616,32 @@ abstract final class ZoneFloorArt {
     }
     for (var y = rect.top; y < rect.bottom; y += spacing) {
       canvas.drawLine(Offset(rect.left, y), Offset(rect.right, y), weft);
+    }
+  }
+
+  /// A two-tone checker of [step] squares, each [light] or [dark] off the
+  /// zone's floor.
+  static void _checker(
+    Canvas canvas,
+    Rect rect,
+    double step,
+    ZoneColors colors, {
+    required double light,
+    required double dark,
+  }) {
+    final on = Paint()..color = _shade(colors.floor, light);
+    final off = Paint()..color = _shade(colors.floor, dark);
+    var row = 0;
+    for (var y = rect.top; y < rect.bottom; y += step) {
+      var col = 0;
+      for (var x = rect.left; x < rect.right; x += step) {
+        canvas.drawRect(
+          Rect.fromLTWH(x, y, step, step),
+          (row + col).isEven ? on : off,
+        );
+        col++;
+      }
+      row++;
     }
   }
 
