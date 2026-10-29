@@ -356,6 +356,10 @@ class _WorldScreenState extends State<WorldScreen> {
   @override
   Widget build(BuildContext context) {
     final game = _game;
+    // The game has no context of its own to ask. Handed over on every build,
+    // so turning the system setting on mid-session stops the spots, the dust
+    // and the jet on the next frame without a restart.
+    game?.reduceMotion = MediaQuery.disableAnimationsOf(context);
     // The emote button sits opposite the joystick. The design puts it on the
     // left, which is right up until a left-handed player moves the stick
     // there — two controls in one thumb's corner is worse than either side.

@@ -372,6 +372,20 @@ class ConferenceMap extends GameMap {
   @override
   bool get hasStageScreen => true;
 
+  @override
+  bool get polishedWater => true;
+
+  @override
+  bool get ambientLife => true;
+
+  /// The water inside the garden fountain's basin: sunk below its rim, so
+  /// lifted less than the rim is — see `ZoneProps.fountainWater`.
+  @override
+  ({Offset centre, double radius}) get fountain => (
+    centre: ZoneProps.fountainWater,
+    radius: WorldLayout.fountain.radius - ZoneProps.fountainWall,
+  );
+
   /// The line painted on the Code Lab's projector screen.
   ///
   /// It comes from `AppConfig`, and it *is* inside the static furniture

@@ -196,6 +196,24 @@ abstract class GameMap {
   /// back wall, and it has to be there to light up when a programme arrives.
   bool get hasStageScreen => false;
 
+  /// Whether this map's water gets the brighter shimmer and the caustic
+  /// glints.
+  ///
+  /// A flag rather than a change for everybody because `WaterComponent` is
+  /// shared: the same class draws the beach's sea, and the beach's look is
+  /// another phase's business.
+  bool get polishedWater => false;
+
+  /// Whether this map has dust in the air and rings floating in its water.
+  ///
+  /// The conference's ambient life, and only the conference's, for the same
+  /// reason as [polishedWater].
+  bool get ambientLife => false;
+
+  /// The surface of this map's fountain, where its live shimmer is drawn,
+  /// or `null` on a map with no fountain.
+  ({Offset centre, double radius})? get fountain => null;
+
   /// Takes the parts of [config] this map paints.
   ///
   /// The default is to take none of them, which is the honest answer for a

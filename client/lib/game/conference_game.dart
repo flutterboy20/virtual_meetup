@@ -4,6 +4,7 @@ import 'dart:ui';
 
 import 'package:client/core/sponsor.dart';
 import 'package:client/game/ambience.dart';
+import 'package:client/game/ambient_life.dart';
 import 'package:client/game/bean_animation.dart';
 import 'package:client/game/bean_appearance.dart';
 import 'package:client/game/bean_component.dart';
@@ -25,6 +26,7 @@ import 'package:client/game/position_throttle.dart';
 import 'package:client/game/remote_players.dart';
 import 'package:client/game/self_marker_component.dart';
 import 'package:client/game/stage_screen_component.dart';
+import 'package:client/game/stage_spots_component.dart';
 import 'package:client/game/tap_target.dart';
 import 'package:client/game/tap_unlock.dart';
 import 'package:client/game/water_component.dart';
@@ -149,6 +151,13 @@ class ConferenceGame extends FlameGame with KeyboardEvents, TapCallbacks {
 
   /// The hall's screen, or `null` on a map with no stage.
   StageScreenComponent? stageScreen;
+
+  /// Whether the player has asked the system for less motion.
+  ///
+  /// Set by the screen that hosts the game, from `MediaQuery`, because the
+  /// game has no `BuildContext` to ask. Read live by every ambient animation
+  /// that has to switch itself off — the stage spots, the dust, the jet.
+  bool reduceMotion = false;
 
   /// The virtual joystick. Available once [onLoad] has run.
   late final JoystickComponent joystick;
@@ -377,7 +386,9 @@ class ConferenceGame extends FlameGame with KeyboardEvents, TapCallbacks {
       visibleWorldRect: () => camera.visibleWorldRect,
       frameP95Millis: () => frameProfile.p95Millis,
       isLocalSubmerged: () => bean.swim.submersion > 0.5,
+      reduceMotion: () => reduceMotion,
     );
+    final fountain = layout.fountain;
 
     // Not awaited: `add` completes when the component mounts, which only
     // happens after `onLoad` returns — awaiting it here would deadlock.
@@ -410,6 +421,36 @@ class ConferenceGame extends FlameGame with KeyboardEvents, TapCallbacks {
         crowdGlow,
         water,
         furniture = FurnitureComponent(layout: layout),
+        // The fountain's moving water, over its still water in the furniture.
+        if (fountain != null)
+          FountainShimmer(
+            water: water,
+            surface: fountain,
+            visibleWorldRect: () => camera.visibleWorldRect,
+            reduceMotion: () => reduceMotion,
+          ),
+        if (fountain != null)
+          FountainJet(
+            surface: fountain,
+            visibleWorldRect: () => camera.visibleWorldRect,
+            reduceMotion: () => reduceMotion,
+          ),
+        if (layout.ambientLife) ...[
+          PoolRings(
+            pool: Rect.fromLTRB(
+              layout.waterRegions.first.left,
+              layout.waterRegions.first.top,
+              layout.waterRegions.first.right,
+              layout.waterRegions.first.bottom,
+            ),
+            visibleWorldRect: () => camera.visibleWorldRect,
+            reduceMotion: () => reduceMotion,
+          ),
+          DustMotes(
+            visibleWorldRect: () => camera.visibleWorldRect,
+            reduceMotion: () => reduceMotion,
+          ),
+        ],
         StringLightsComponent(runs: layout.lightRuns),
         // Only on a map that has a pub, which is the beach.
         if (layout.hasDisco) DiscoComponent(),
@@ -417,6 +458,12 @@ class ConferenceGame extends FlameGame with KeyboardEvents, TapCallbacks {
         // An empty line list is the whole of "nothing here says anything".
         if (layout.hasStageScreen)
           stageScreen = StageScreenComponent(lines: layout.stageLines),
+        // The same stage, so the same condition.
+        if (layout.hasStageScreen)
+          StageSpotsComponent(
+            visibleWorldRect: () => camera.visibleWorldRect,
+            reduceMotion: () => reduceMotion,
+          ),
         // Only on a map that has one, which is the beach. `null` here is the
         // whole of "this map keeps no secrets".
         if (hint != null) HintBeanComponent(x: hint.x, y: hint.y),

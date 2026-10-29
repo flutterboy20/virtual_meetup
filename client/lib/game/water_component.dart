@@ -75,6 +75,7 @@ class WaterComponent extends PositionComponent {
     this.frameP95Millis,
     this.localSwimmerId,
     this.isLocalSubmerged,
+    this.reduceMotion,
   }) : map = map ?? ConferenceMap.empty,
        field = field ?? SplashField(),
        lod = lod ?? WaterLod(),
@@ -107,6 +108,12 @@ class WaterComponent extends PositionComponent {
   /// Whether the local bean is currently under the surface.
   final bool Function()? isLocalSubmerged;
 
+  /// Whether the player has asked for less motion, or `null` for "no".
+  ///
+  /// Switches off only what Phase 16 added — the caustic glints. The bands
+  /// and crests predate it and are this water's whole read.
+  final bool Function()? reduceMotion;
+
   /// How much detail this device can currently afford.
   final WaterLod lod;
 
@@ -136,12 +143,22 @@ class WaterComponent extends PositionComponent {
   static const Color _deep = Color(0xFF1C6E8C);
   static const Color _shallow = Color(0xFF57BEDA);
   static const Color _crest = Color(0x59EAFBFF);
+  static const Color _shimmer = Color(0xFFD2F4FF);
+
+  /// The colour of a caustic glint, added to the water under it.
+  static const Color glintColor = Color(0x80FFFFFF);
 
   /// How round the water's rim is, in world units.
   static const Radius shapeRadius = Radius.circular(26);
 
   double _phase = 0;
   double? _spacing;
+
+  /// Where the surface is in its cycle, in radians.
+  ///
+  /// Public so the [FountainShimmer] moves off the same clock, and the pool
+  /// and the fountain breathe together.
+  double get phase => _phase;
   final Map<Rect, Paint> _fills = {};
 
   /// Every swimmable rectangle, as drawable rects.
@@ -218,7 +235,9 @@ class WaterComponent extends PositionComponent {
       ..drawRect(rect, _fillFor(rect));
 
     _renderBands(canvas, rect, visible);
-    _renderCrests(canvas, rect, visible);
+    final lattice = crestLattice(rect, visible);
+    _renderCrests(canvas, lattice);
+    if (_glinting) _renderCaustics(canvas, causticGlints(lattice, _phase));
     _renderWakes(canvas);
 
     canvas
@@ -263,10 +282,15 @@ class WaterComponent extends PositionComponent {
     for (var i = 0; i < bandCount; i++) {
       final t = (_phase + i * 2 * math.pi / bandCount) % (2 * math.pi);
       final y = rect.top + rect.height * (0.5 + 0.5 * math.sin(t));
-      final alpha = 0.05 + 0.05 * (1 + math.cos(t)) / 2;
+      final crest = (1 + math.cos(t)) / 2;
       canvas.drawRect(
         Rect.fromLTRB(left, y - 9, right, y + 9),
-        Paint()..color = _shallow.withValues(alpha: alpha),
+        Paint()
+          ..color = map.polishedWater
+              // Brighter and paler: a band that catches the sky rather than
+              // a slightly lighter blue.
+              ? _shimmer.withValues(alpha: 0.07 + 0.11 * crest)
+              : _shallow.withValues(alpha: 0.05 + 0.05 * crest),
       );
     }
   }
@@ -275,8 +299,7 @@ class WaterComponent extends PositionComponent {
   ///
   /// Each nods at its own offset off the same accumulator, so the whole
   /// surface moves from one number.
-  void _renderCrests(Canvas canvas, Rect rect, Rect visible) {
-    final lattice = crestLattice(rect, visible);
+  void _renderCrests(Canvas canvas, List<CrestPoint> lattice) {
     if (lattice.isEmpty) return;
 
     final crest = Paint()
@@ -387,6 +410,79 @@ class WaterComponent extends PositionComponent {
   /// The low bits of [hash] as a number from 0 to 1.
   static double _unit(int hash) => (hash & 0xFFFF) / 0xFFFF;
 
+  /// Whether the caustic glints are drawn this frame.
+  bool get _glinting =>
+      map.polishedWater && lod.isAnimated && !(reduceMotion?.call() ?? false);
+
+  /// How long a glint's arms are at their brightest, in world units.
+  static const double maxGlint = 7;
+
+  /// How bright a glint seeded [seed] is at [phase], from 0 to 1.
+  ///
+  /// A cubed sine, cut off below zero: dark for half its cycle and sharply
+  /// bright at the top of the other half. That is how light focused through
+  /// a moving surface looks on the floor of a pool — mostly nothing, then a
+  /// flash — and it means at any moment only some of the glints are lit.
+  static double twinkle(double phase, double seed) {
+    final s = math.sin(phase * 2.3 + seed * 2 * math.pi);
+    return s <= 0 ? 0 : s * s * s;
+  }
+
+  /// The caustic glints over [lattice] at [phase]: one beside each lit
+  /// crest, its size its brightness.
+  ///
+  /// Riding on the crest lattice rather than a second one, so the glints are
+  /// viewport-scoped, LOD'd and capped by exactly the same rules for free: at
+  /// the flat tier the lattice is empty and so is this.
+  static List<({Offset at, double size, double seed})> causticGlints(
+    List<CrestPoint> lattice,
+    double phase,
+  ) => [
+    for (final point in lattice)
+      if (twinkle(phase, point.seed) > 0.05)
+        (
+          // Off to the south-east of its crest, in the trough behind it.
+          at: Offset(point.x + 11, point.y + 9),
+          size: maxGlint * twinkle(phase, point.seed),
+          seed: point.seed,
+        ),
+  ];
+
+  /// Draws [glints] as four-point sparkles, all in one path, added to the
+  /// water.
+  ///
+  /// Wider than tall, because the surface is seen at a slant: a sparkle on
+  /// it is squashed the same way the wake rings are.
+  static void paintGlints(
+    Canvas canvas,
+    Iterable<({Offset at, double size, double seed})> glints,
+  ) {
+    final sparks = Path();
+    for (final glint in glints) {
+      final at = glint.at;
+      sparks
+        ..moveTo(at.dx - glint.size, at.dy)
+        ..lineTo(at.dx + glint.size, at.dy)
+        ..moveTo(at.dx, at.dy - glint.size * 0.55)
+        ..lineTo(at.dx, at.dy + glint.size * 0.55);
+    }
+    canvas.drawPath(sparks, _glintPaint);
+  }
+
+  static final Paint _glintPaint = Paint()
+    ..color = glintColor
+    ..blendMode = BlendMode.plus
+    ..style = PaintingStyle.stroke
+    ..strokeWidth = 1.6
+    ..strokeCap = StrokeCap.round;
+
+  void _renderCaustics(
+    Canvas canvas,
+    List<({Offset at, double size, double seed})> glints,
+  ) {
+    if (glints.isNotEmpty) paintGlints(canvas, glints);
+  }
+
   /// Whose palette the rim borrows: the zone the water sits in.
   WorldZone _zoneOf(Rect rect) =>
       map.spec.zoneAt(rect.center.dx, rect.center.dy) ?? WorldZone.lounge;
@@ -436,5 +532,97 @@ class SplashLayer extends PositionComponent {
         Paint()..color = _droplet.withValues(alpha: 0.85 * (1 - age)),
       );
     }
+  }
+}
+
+/// The live shimmer on the fountain's water.
+///
+/// The fountain's water is painted into the furniture picture, inside its
+/// basin, and the furniture renders **above** [WaterComponent]. So the moving
+/// part of it lives here, in a layer just over the furniture, and shares the
+/// pool's clock and detail tier: the same reason [SplashLayer] exists, the
+/// other way up.
+///
+/// A sliding pale band and six glints round the spout. Nothing at the flat
+/// tier, nothing under reduce-motion, nothing off camera — and in each of
+/// those cases the still water in the picture underneath is what shows.
+class FountainShimmer extends Component {
+  /// Creates the shimmer over [surface], moving with [water].
+  FountainShimmer({
+    required this.water,
+    required this.surface,
+    this.visibleWorldRect,
+    this.reduceMotion,
+  }) : super(priority: -18);
+
+  /// The pool whose phase and tier this follows.
+  final WaterComponent water;
+
+  /// The fountain's water, as a circle.
+  final ({Offset centre, double radius}) surface;
+
+  /// What the camera can currently see, or `null` for everything.
+  final Rect Function()? visibleWorldRect;
+
+  /// Whether the player has asked for less motion, or `null` for "no".
+  final bool Function()? reduceMotion;
+
+  /// How many glints sparkle round the spout.
+  static const int glintCount = 6;
+
+  /// The glints on a fountain of [surface] at [phase].
+  ///
+  /// Fixed places on a ring round the spout, each twinkling at its own
+  /// offset. Fixed rather than scattered because the fountain is small
+  /// enough that six is all of it, and a glint that wandered would read as a
+  /// fish.
+  static List<({Offset at, double size, double seed})> glints(
+    ({Offset centre, double radius}) surface,
+    double phase,
+  ) => [
+    for (var i = 0; i < glintCount; i++)
+      if (WaterComponent.twinkle(phase * 1.3, i / glintCount) > 0.05)
+        (
+          at:
+              surface.centre +
+              Offset.fromDirection(
+                i * 2 * math.pi / glintCount + 0.4,
+                surface.radius * (i.isEven ? 0.55 : 0.75),
+              ),
+          size:
+              WaterComponent.maxGlint *
+              0.8 *
+              WaterComponent.twinkle(phase * 1.3, i / glintCount),
+          seed: i / glintCount,
+        ),
+  ];
+
+  @override
+  void render(Canvas canvas) {
+    if (reduceMotion?.call() ?? false) return;
+    if (!water.lod.isAnimated) return;
+    final bounds = Rect.fromCircle(
+      center: surface.centre,
+      radius: surface.radius,
+    );
+    final visible = visibleWorldRect?.call();
+    if (visible != null && !visible.overlaps(bounds)) return;
+
+    final phase = water.phase;
+    final band = surface.centre.dy + surface.radius * math.sin(phase);
+    canvas
+      ..save()
+      ..clipRRect(
+        RRect.fromRectAndRadius(bounds, Radius.circular(surface.radius)),
+      )
+      ..drawRect(
+        Rect.fromLTRB(bounds.left, band - 6, bounds.right, band + 6),
+        Paint()
+          ..color = WaterComponent._shimmer.withValues(
+            alpha: 0.10 + 0.10 * (1 + math.cos(phase)) / 2,
+          ),
+      );
+    WaterComponent.paintGlints(canvas, glints(surface, phase));
+    canvas.restore();
   }
 }
