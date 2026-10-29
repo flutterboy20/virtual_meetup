@@ -217,35 +217,44 @@ class _Swatches extends StatelessWidget {
   }
 }
 
-/// The hats, one row that scrolls sideways.
+/// The hats, every one on screen at once: two rows of three.
 ///
-/// One row rather than a wrap: six chips wrapped beside the bean made the
-/// badge two hundred pixels taller, and on a phone that is the difference
-/// between "Scan in" being on screen and being under the fold.
+/// A fixed grid rather than a row that scrolls sideways — a hat you have to
+/// scroll to find is a hat nobody picks — and rather than a free wrap, whose
+/// row count depends on how wide the words come out. Three equal columns are
+/// two rows on every phone, in every font, so the badge's height is known and
+/// the way in stays on screen. The room came from the attendee stripe the
+/// badge no longer has.
 class _HatChips extends StatelessWidget {
   const _HatChips({required this.model});
 
   final SetupViewModel model;
 
+  static const double _gap = 6;
+
   @override
   Widget build(BuildContext context) {
     return ValueListenableBuilder<PlayerCosmetic>(
       valueListenable: model.cosmetic,
-      builder: (context, selected, _) => SingleChildScrollView(
-        scrollDirection: Axis.horizontal,
-        child: Row(
-          children: [
-            for (final cosmetic in PlayerCosmetic.values) ...[
-              if (cosmetic != PlayerCosmetic.values.first)
-                const SizedBox(width: 6),
-              _HatChip(
-                label: cosmeticLabels[cosmetic] ?? cosmetic.wireName,
-                isSelected: cosmetic == selected,
-                onSelected: () => model.cosmetic.value = cosmetic,
-              ),
+      builder: (context, selected, _) => LayoutBuilder(
+        builder: (context, constraints) {
+          final width = (constraints.maxWidth - 2 * _gap) / 3;
+          return Wrap(
+            spacing: _gap,
+            runSpacing: _gap,
+            children: [
+              for (final cosmetic in PlayerCosmetic.values)
+                SizedBox(
+                  width: width,
+                  child: _HatChip(
+                    label: cosmeticLabels[cosmetic] ?? cosmetic.wireName,
+                    isSelected: cosmetic == selected,
+                    onSelected: () => model.cosmetic.value = cosmetic,
+                  ),
+                ),
             ],
-          ],
-        ),
+          );
+        },
       ),
     );
   }
@@ -312,12 +321,21 @@ class _HatChip extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return ChoiceChip(
-      label: Text(label),
+      // Centred in its cell, and shrunk rather than cut when a long name
+      // ("Propeller Beanie") is wider than a third of the badge.
+      label: Align(
+        heightFactor: 1,
+        child: FittedBox(fit: BoxFit.scaleDown, child: Text(label)),
+      ),
       selected: isSelected,
       onSelected: (_) => onSelected(),
       showCheckmark: false,
       visualDensity: VisualDensity.compact,
-      materialTapTargetSize: MaterialTapTargetSize.padded,
+      // Sized to what is drawn, not padded out to 48: invisible padding on
+      // two rows is what pushed the way in off a phone's screen. Each chip
+      // is still a third of the badge wide and a thumb's height tall.
+      materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+      labelPadding: const EdgeInsets.symmetric(horizontal: 4),
       backgroundColor: LanyardColors.badge,
       selectedColor: LanyardColors.ink,
       side: BorderSide(

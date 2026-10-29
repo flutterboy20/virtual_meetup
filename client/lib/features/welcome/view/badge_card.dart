@@ -305,10 +305,9 @@ class _Card extends StatelessWidget {
             _Header(eyebrow: eyebrow, worldName: worldName, compact: compact),
             if (message != null && message.isNotEmpty) _Notice(message),
             Padding(
-              padding: const EdgeInsets.fromLTRB(20, 16, 20, 16),
+              padding: const EdgeInsets.fromLTRB(20, 16, 20, 20),
               child: body,
             ),
-            const _RoleStripe(),
           ],
         ),
       ),
@@ -431,67 +430,4 @@ class _Header extends StatelessWidget {
       ),
     );
   }
-}
-
-/// The yellow ATTENDEE stripe across the foot of the badge.
-///
-/// Everybody is an attendee: the wire carries no roles, and this phase adds
-/// none. The word is here because a badge without one reads as a blank.
-class _RoleStripe extends StatelessWidget {
-  const _RoleStripe();
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      color: LanyardColors.signal,
-      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
-      child: Row(
-        children: [
-          Text(
-            'ATTENDEE',
-            style: LanyardText.sign.copyWith(color: LanyardColors.ink),
-          ),
-          const SizedBox(width: 12),
-          // The barcode is decoration, so it is what gives way on a narrow
-          // phone: it shrinks, the word it sits beside does not.
-          const Flexible(
-            child: Align(
-              alignment: Alignment.centerRight,
-              child: ExcludeSemantics(
-                child: SizedBox(
-                  width: 92,
-                  height: 22,
-                  child: CustomPaint(painter: _BarcodePainter()),
-                ),
-              ),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-/// A decorative barcode. It encodes nothing.
-class _BarcodePainter extends CustomPainter {
-  const _BarcodePainter();
-
-  /// Bar widths, repeated across the box. Fixed, so it never flickers.
-  static const List<double> _bars = [2, 1, 3, 1, 1, 2, 2, 1, 3, 2, 1, 1];
-
-  @override
-  void paint(Canvas canvas, Size size) {
-    final paint = Paint()..color = LanyardColors.ink;
-    var x = 0.0;
-    var i = 0;
-    while (x < size.width) {
-      final w = _bars[i % _bars.length];
-      if (i.isEven) canvas.drawRect(Rect.fromLTWH(x, 0, w, size.height), paint);
-      x += w + 1;
-      i++;
-    }
-  }
-
-  @override
-  bool shouldRepaint(_BarcodePainter oldDelegate) => false;
 }

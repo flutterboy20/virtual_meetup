@@ -11,7 +11,7 @@ the room. The event's name and front-door copy are config, not code.
 in. What it is, in one page: [virtualmeetup.dev/about.html](https://virtualmeetup.dev/about.html).
 
 <p align="center">
-  <img src="docs/screenshots/front-door.webp" width="260" alt="The front door on a phone: a conference badge on a lanyard with your name, bean, colour and hat, the hall signs with live head counts, and the Scan in button.">
+  <img src="docs/screenshots/front-door.webp" width="260" alt="The front door on a phone: a conference badge on a lanyard with your name, your bean, eight colours and all six hats, the hall signs with live head counts, and the Enter button.">
   &nbsp;&nbsp;
   <img src="docs/screenshots/world.webp" width="260" alt="Inside the world on a phone, in the garden: your bean on the paved walk with its nametag, the fountain with its jet and gravel ring, stepping stones, a tree whose canopy hides the bot behind it, the room card, the minimap, the joystick, and the dock with menu, reactions and Share.">
 </p>

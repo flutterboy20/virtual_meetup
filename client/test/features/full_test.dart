@@ -54,7 +54,7 @@ void main() {
     );
     await tester.pump();
     await tester.pump();
-    await scanIn(tester);
+    await tapEnter(tester);
     await tester.pump();
     await tester.pump();
     await tester.pump();
@@ -138,7 +138,7 @@ void main() {
       );
       await tester.pump();
       await tester.pump();
-      await scanIn(tester);
+      await tapEnter(tester);
       await tester.pump();
       await tester.pump();
       await tester.pump();
@@ -177,7 +177,7 @@ void main() {
       );
       await tester.pump();
       await tester.pump();
-      await scanIn(tester);
+      await tapEnter(tester);
       await tester.pump();
       await tester.pump();
       await tester.pump();

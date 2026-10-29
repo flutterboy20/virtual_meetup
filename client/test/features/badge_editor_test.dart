@@ -120,6 +120,30 @@ void main() {
     }
   });
 
+  testWidgets('every hat is on the badge at once, in two rows', (
+    tester,
+  ) async {
+    // No sideways scrolling: a hat you have to scroll to find is a hat
+    // nobody picks.
+    final m = model();
+    await pump(tester, m);
+
+    final badge = tester.getRect(find.byType(BadgeEditor));
+    final chips = find.byType(ChoiceChip);
+    final rows = <double>{};
+    for (var i = 0; i < PlayerCosmetic.values.length; i++) {
+      final chip = tester.getRect(chips.at(i));
+      expect(badge.contains(chip.topLeft), isTrue);
+      expect(badge.contains(chip.bottomRight - const Offset(1, 1)), isTrue);
+      rows.add(chip.top);
+    }
+    expect(
+      find.ancestor(of: chips.first, matching: find.byType(Scrollable)),
+      findsNothing,
+    );
+    expect(rows, hasLength(2));
+  });
+
   testWidgets('a hat chip picks the hat and the bean follows', (
     tester,
   ) async {
@@ -190,7 +214,7 @@ void main() {
   testWidgets('stays short enough to leave room for the way in', (
     tester,
   ) async {
-    // The badge shares an 844px phone with the hall signs and "Scan in".
+    // The badge shares an 844px phone with the hall signs and "Enter".
     // Past this height, the way in drops under the fold on a common phone.
     final m = model();
     await pump(tester, m);

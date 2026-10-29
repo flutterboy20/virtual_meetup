@@ -237,7 +237,7 @@ void main() {
       await pump(tester, store: store);
 
       await tap(tester, 'Beach');
-      await scanIn(tester);
+      await tapEnter(tester);
 
       final world = tester.widget<WorldScreen>(find.byType(WorldScreen));
       expect(world.mapId, equals(MapId.beach));
@@ -251,7 +251,7 @@ void main() {
       await store.writeMapId(MapId.beach);
 
       await pump(tester, store: store);
-      await scanIn(tester);
+      await tapEnter(tester);
 
       expect(
         tester.widget<WorldScreen>(find.byType(WorldScreen)).mapId,
@@ -267,7 +267,7 @@ void main() {
       SocketFactory? openSocket,
     }) async {
       await pump(tester, store: store, openSocket: openSocket);
-      await scanIn(tester);
+      await tapEnter(tester);
     }
 
     testWidgets('the HUD offers the other map, and only the other', (

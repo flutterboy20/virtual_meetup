@@ -134,7 +134,7 @@ abstract final class LanyardColors {
   /// [AppTheme.seed], so the brand is one colour in both themes.
   static const Color blue = AppTheme.seed;
 
-  /// Wayfinding yellow: the arrows on the hall signs and the ATTENDEE stripe.
+  /// Wayfinding yellow: the arrows on the hall signs.
   static const Color signal = Color(0xFFFFD23F);
 
   /// "This needs your attention", on paper or on the badge.

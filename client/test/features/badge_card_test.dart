@@ -53,12 +53,15 @@ void main() {
       expect(find.text('Virtual Meetup'), findsOneWidget);
     });
 
-    testWidgets('prints the name and the attendee stripe', (tester) async {
+    testWidgets('prints the name, with no role stripe under it', (
+      tester,
+    ) async {
       await tester.pumpWidget(_host(_badge()));
 
       expect(find.text('HELLO, MY NAME IS'), findsOneWidget);
       expect(find.text('Ruhaan'), findsOneWidget);
-      expect(find.text('ATTENDEE'), findsOneWidget);
+      // Removed to give the hats room: every badge said the same word.
+      expect(find.text('ATTENDEE'), findsNothing);
     });
 
     testWidgets('says so when there is no name yet', (tester) async {

@@ -86,7 +86,7 @@ void main() {
       await pumpApp(tester);
 
       expect(find.byType(WelcomeScreen), findsOneWidget);
-      expect(find.text(WelcomeScreen.scanInLabel), findsOneWidget);
+      expect(find.text(WelcomeScreen.enterLabel), findsOneWidget);
     });
 
     testWidgets('shows the live online count', (tester) async {
@@ -103,7 +103,7 @@ void main() {
       expect(find.textContaining('Explore!!!'), findsOneWidget);
       // The way in is still there. The count decorates the door, it does
       // not gate it.
-      expect(find.text(WelcomeScreen.scanInLabel), findsOneWidget);
+      expect(find.text(WelcomeScreen.enterLabel), findsOneWidget);
     });
 
     testWidgets('offers the link before anybody has walked in', (tester) async {
@@ -164,7 +164,7 @@ void main() {
 
       expect(find.text('Ada'), findsOneWidget);
 
-      await scanIn(tester);
+      await tapEnter(tester);
 
       expect(find.byType(WorldScreen), findsOneWidget);
       expect(find.byType(BadgeEditor), findsNothing);
@@ -178,7 +178,7 @@ void main() {
       // Seeded with what they already had, so fixing a typo is an edit.
       await tester.enterText(find.byType(TextField), 'Ada L');
       await tester.pump();
-      await scanIn(tester);
+      await tapEnter(tester);
 
       expect(find.byType(WorldScreen), findsOneWidget);
       final saved = await store.readIdentity();
@@ -231,7 +231,7 @@ void main() {
 
       await tester.enterText(find.byType(TextField), 'Ada Lovelace');
       await tester.pump();
-      await scanIn(tester);
+      await tapEnter(tester);
 
       expect(find.byType(WorldScreen), findsOneWidget);
       expect((await store.readIdentity())?.name, equals('Ada Lovelace'));
@@ -241,7 +241,7 @@ void main() {
   group('the world', () {
     Future<FakeSocket> enterWorld(WidgetTester tester) async {
       final (:socket, :store) = await pumpApp(tester, identity: returning);
-      await scanIn(tester);
+      await tapEnter(tester);
       await tester.pump();
       // The world reads its booth config before it builds the game, so it
       // takes one more turn of the loop to appear than it used to.
@@ -388,7 +388,7 @@ void main() {
       // go through the screen where the name is chosen — with nothing
       // pre-filled, because the server will refuse the old one anyway.
       final (:socket, :store) = await pumpApp(tester, identity: returning);
-      await scanIn(tester);
+      await tapEnter(tester);
       await tester.pump();
       await tester.pump();
       await tester.pump();
@@ -422,7 +422,7 @@ void main() {
 
     testWidgets('a mis-tapped log out changes nothing', (tester) async {
       final (:socket, :store) = await pumpApp(tester, identity: returning);
-      await scanIn(tester);
+      await tapEnter(tester);
       await tester.pump();
       await tester.pump();
       await tester.pump();
@@ -445,7 +445,7 @@ void main() {
       tester,
     ) async {
       final (:socket, :store) = await pumpApp(tester, identity: returning);
-      await scanIn(tester);
+      await tapEnter(tester);
       await tester.pump();
       await tester.pump();
       await tester.pump();

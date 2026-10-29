@@ -361,7 +361,7 @@ void main() {
         config: AppConfig.defaults,
         identity: returning,
       );
-      await scanIn(tester);
+      await tapEnter(tester);
       await tester.pump();
       await tester.pump();
       await tester.pump();
@@ -387,7 +387,7 @@ void main() {
         config: AppConfig.defaults,
         identity: returning,
       );
-      await scanIn(tester);
+      await tapEnter(tester);
       await tester.pump();
       await tester.pump();
       await tester.pump();
@@ -440,7 +440,7 @@ void main() {
         config: AppConfig.defaults,
         identity: returning,
       );
-      await scanIn(tester);
+      await tapEnter(tester);
       await tester.pump();
       await tester.pump();
       await tester.pump();

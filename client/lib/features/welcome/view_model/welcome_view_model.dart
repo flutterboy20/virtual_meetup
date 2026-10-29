@@ -59,7 +59,7 @@ class WelcomeViewModel extends ChangeNotifier {
   ///
   /// Loaded from the device, so a returning player lands back where they
   /// were, and written back the moment they pick the other one — not when
-  /// they scan in. Somebody who taps Beach and then closes the tab meant
+  /// they tap Enter. Somebody who taps Beach and then closes the tab meant
   /// the beach.
   MapId get selectedMap => _selectedMap;
 

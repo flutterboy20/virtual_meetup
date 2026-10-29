@@ -53,7 +53,7 @@ void main() {
         '${size.width.toInt()}x${size.height.toInt()}', (tester) async {
       await pumpAt(tester, size);
 
-      final button = tester.getRect(find.text(WelcomeScreen.scanInLabel));
+      final button = tester.getRect(find.text(WelcomeScreen.enterLabel));
       expect(button.bottom, lessThanOrEqualTo(size.height));
       expect(tester.takeException(), isNull);
     });
@@ -64,7 +64,7 @@ void main() {
 
     // Below the screen's own Theme, which is where its widgets read from.
     final theme = Theme.of(
-      tester.element(find.text(WelcomeScreen.scanInLabel)),
+      tester.element(find.text(WelcomeScreen.enterLabel)),
     );
     expect(theme.brightness, equals(Brightness.light));
   });
@@ -73,7 +73,7 @@ void main() {
     tester,
   ) async {
     final socket = await pumpAt(tester, const Size(390, 844));
-    await scanIn(tester);
+    await tapEnter(tester);
     await tester.pump();
 
     socket.emit(

@@ -60,7 +60,7 @@ class WelcomeScreen extends StatefulWidget {
   final ValueChanged<PlayerIdentity> onJoin;
 
   /// What the way in says.
-  static const String scanInLabel = 'Scan in';
+  static const String enterLabel = 'Enter';
 
   @override
   State<WelcomeScreen> createState() => _WelcomeScreenState();
@@ -114,7 +114,7 @@ class _WelcomeScreenState extends State<WelcomeScreen>
     super.dispose();
   }
 
-  Future<void> _scanIn() async {
+  Future<void> _enter() async {
     if (_entering) return;
     _entering = true;
     final identity = await _badge.save();
@@ -173,7 +173,7 @@ class _WelcomeScreenState extends State<WelcomeScreen>
                             swing: _loop,
                             notice: widget.notice,
                             compact: isShort,
-                            onSubmitted: () => unawaited(_scanIn()),
+                            onSubmitted: () => unawaited(_enter()),
                           ),
                         ),
                       ),
@@ -209,7 +209,7 @@ class _WelcomeScreenState extends State<WelcomeScreen>
                             // wondering what they did wrong, and the badge
                             // already says.
                             onPressed: canEnter
-                                ? () => unawaited(_scanIn())
+                                ? () => unawaited(_enter())
                                 : null,
                           ),
                         ),
@@ -391,9 +391,9 @@ class _ScanInButton extends StatelessWidget {
       child: const Row(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
-          Text(WelcomeScreen.scanInLabel),
+          Text(WelcomeScreen.enterLabel),
           SizedBox(width: 10),
-          Icon(Icons.qr_code_scanner_rounded, size: 22),
+          Icon(Icons.arrow_forward_rounded, size: 22),
         ],
       ),
     );

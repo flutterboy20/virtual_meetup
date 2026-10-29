@@ -5,8 +5,8 @@ import 'package:flutter_test/flutter_test.dart';
 ///
 /// Scrolls first: the badge, the hall signs and the button are a phone's
 /// height, and the default 800x600 test window is shorter than that.
-Future<void> scanIn(WidgetTester tester) async {
-  final button = find.text(WelcomeScreen.scanInLabel);
+Future<void> tapEnter(WidgetTester tester) async {
+  final button = find.text(WelcomeScreen.enterLabel);
   await tester.ensureVisible(button);
   await tester.pump();
   await tester.tap(button);
