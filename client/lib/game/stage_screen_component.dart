@@ -2,6 +2,7 @@ import 'dart:ui';
 
 import 'package:client/core/app_fonts.dart';
 import 'package:client/game/world_layout.dart';
+import 'package:client/game/zone_props.dart';
 import 'package:flame/components.dart';
 
 /// Which line the stage screen is showing, and how far through a swap it is.
@@ -213,12 +214,10 @@ class StageScreenComponent extends PositionComponent {
 
   static const double _inset = 12;
 
-  static Rect get _screenRect => Rect.fromLTRB(
-    WorldLayout.stageScreen.left,
-    WorldLayout.stageScreen.top,
-    WorldLayout.stageScreen.right,
-    WorldLayout.stageScreen.bottom,
-  );
+  /// [WorldLayout.stageScreen] as it is drawn: lifted with the stage deck
+  /// since Phase 16, and read from the furniture so the words can never land
+  /// beside the frame they are meant to be in.
+  static Rect get _screenRect => ZoneProps.stageScreenFace;
 
   /// Lays [text] out once and keeps it.
   ///

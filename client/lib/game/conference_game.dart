@@ -4,6 +4,7 @@ import 'dart:ui';
 
 import 'package:client/core/sponsor.dart';
 import 'package:client/game/ambience.dart';
+import 'package:client/game/ambient_life.dart';
 import 'package:client/game/bean_animation.dart';
 import 'package:client/game/bean_appearance.dart';
 import 'package:client/game/bean_component.dart';
@@ -25,6 +26,7 @@ import 'package:client/game/position_throttle.dart';
 import 'package:client/game/remote_players.dart';
 import 'package:client/game/self_marker_component.dart';
 import 'package:client/game/stage_screen_component.dart';
+import 'package:client/game/stage_spots_component.dart';
 import 'package:client/game/tap_target.dart';
 import 'package:client/game/tap_unlock.dart';
 import 'package:client/game/water_component.dart';
@@ -119,6 +121,17 @@ class ConferenceGame extends FlameGame with KeyboardEvents, TapCallbacks {
   /// nobody meant to make.
   static const double emoteMinimumGap = 0.3;
 
+  /// Where your own bean sits in the z-order: just over the overhead.
+  ///
+  /// Everybody else's bean is under the canopies and the tops of the walls,
+  /// which is how they walk behind a tree. Yours is not, ever: losing sight
+  /// of yourself under a tree is the one thing the overhead may not cost.
+  static const int ownBeanPriority = FurnitureComponent.overheadPriority + 1;
+
+  /// Where a dive's droplets sit: over your own bean, which is the one
+  /// diving through them.
+  static const int splashPriority = ownBeanPriority + 1;
+
   /// Called when the server pushes a new config.
   ///
   /// The game applies it to itself first and *then* tells the widget layer,
@@ -133,8 +146,18 @@ class ConferenceGame extends FlameGame with KeyboardEvents, TapCallbacks {
   /// The recorded furniture, kept so a config edit can re-record it.
   late final FurnitureComponent furniture;
 
+  /// The recorded overhead, kept so a booth edit can re-record it.
+  late final FurnitureComponent overhead;
+
   /// The hall's screen, or `null` on a map with no stage.
   StageScreenComponent? stageScreen;
+
+  /// Whether the player has asked the system for less motion.
+  ///
+  /// Set by the screen that hosts the game, from `MediaQuery`, because the
+  /// game has no `BuildContext` to ask. Read live by every ambient animation
+  /// that has to switch itself off — the stage spots, the dust, the jet.
+  bool reduceMotion = false;
 
   /// The virtual joystick. Available once [onLoad] has run.
   late final JoystickComponent joystick;
@@ -347,7 +370,7 @@ class ConferenceGame extends FlameGame with KeyboardEvents, TapCallbacks {
       appearance: appearance,
       animation: BeanAnimation(maxSpeed: beanMaxSpeed),
       map: layout,
-    );
+    )..priority = ownBeanPriority;
     remotePlayers = RemotePlayers(maxSpeed: beanMaxSpeed, map: layout);
     emotes = EmoteLayer();
     crowdGlow = CrowdGlowComponent(
@@ -363,14 +386,19 @@ class ConferenceGame extends FlameGame with KeyboardEvents, TapCallbacks {
       visibleWorldRect: () => camera.visibleWorldRect,
       frameP95Millis: () => frameProfile.p95Millis,
       isLocalSubmerged: () => bean.swim.submersion > 0.5,
+      reduceMotion: () => reduceMotion,
     );
+    final fountain = layout.fountain;
 
     // Not awaited: `add` completes when the component mounts, which only
     // happens after `onLoad` returns — awaiting it here would deadlock.
     //
     // The order is the z-order: floor, then the crowd glow painted on it,
-    // then water, then furniture, then beans, then the things that must never
-    // be hidden behind a bean — reactions and names.
+    // then water, then furniture, then beans, then the overhead (canopies,
+    // the tops of walls), then the things that must never be hidden behind a
+    // bean — reactions and names. Your own bean and the droplets it dives
+    // through are lifted over the overhead by priority — see
+    // [ownBeanPriority].
     // Whatever was persisted, applied through the setter so the map still
     // gets the last word on whether surfing happens here.
     bean.hasBoard = _unlock.isArmed;
@@ -393,6 +421,36 @@ class ConferenceGame extends FlameGame with KeyboardEvents, TapCallbacks {
         crowdGlow,
         water,
         furniture = FurnitureComponent(layout: layout),
+        // The fountain's moving water, over its still water in the furniture.
+        if (fountain != null)
+          FountainShimmer(
+            water: water,
+            surface: fountain,
+            visibleWorldRect: () => camera.visibleWorldRect,
+            reduceMotion: () => reduceMotion,
+          ),
+        if (fountain != null)
+          FountainJet(
+            surface: fountain,
+            visibleWorldRect: () => camera.visibleWorldRect,
+            reduceMotion: () => reduceMotion,
+          ),
+        if (layout.ambientLife) ...[
+          PoolRings(
+            pool: Rect.fromLTRB(
+              layout.waterRegions.first.left,
+              layout.waterRegions.first.top,
+              layout.waterRegions.first.right,
+              layout.waterRegions.first.bottom,
+            ),
+            visibleWorldRect: () => camera.visibleWorldRect,
+            reduceMotion: () => reduceMotion,
+          ),
+          DustMotes(
+            visibleWorldRect: () => camera.visibleWorldRect,
+            reduceMotion: () => reduceMotion,
+          ),
+        ],
         StringLightsComponent(runs: layout.lightRuns),
         // Only on a map that has a pub, which is the beach.
         if (layout.hasDisco) DiscoComponent(),
@@ -400,6 +458,12 @@ class ConferenceGame extends FlameGame with KeyboardEvents, TapCallbacks {
         // An empty line list is the whole of "nothing here says anything".
         if (layout.hasStageScreen)
           stageScreen = StageScreenComponent(lines: layout.stageLines),
+        // The same stage, so the same condition.
+        if (layout.hasStageScreen)
+          StageSpotsComponent(
+            visibleWorldRect: () => camera.visibleWorldRect,
+            reduceMotion: () => reduceMotion,
+          ),
         // Only on a map that has one, which is the beach. `null` here is the
         // whole of "this map keeps no secrets".
         if (hint != null) HintBeanComponent(x: hint.x, y: hint.y),
@@ -410,7 +474,9 @@ class ConferenceGame extends FlameGame with KeyboardEvents, TapCallbacks {
         // Droplets go over the beans; the wakes they leave stay under them,
         // inside `water`. A splash you dive *through* and a ripple you swim
         // *on* cannot share one z-order.
-        SplashLayer(field: water.field),
+        SplashLayer(field: water.field)..priority = splashPriority,
+        // The upper parts of tall props, over every bean but yours.
+        overhead = FurnitureComponent.overhead(layout: layout),
         emotes,
         nametags = NametagLayer(
           remotePlayers: remotePlayers,
@@ -501,6 +567,7 @@ class ConferenceGame extends FlameGame with KeyboardEvents, TapCallbacks {
     map.setSponsors(sponsors);
     if (!isLoaded) return;
     furniture.rebuild();
+    overhead.rebuild();
     _rebuildBoothStaff();
   }
 

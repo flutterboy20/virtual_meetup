@@ -12,6 +12,7 @@ import 'package:protocol/protocol.dart';
 
 import '../support/fake_identity_store.dart';
 import '../support/fake_socket.dart';
+import '../support/front_door.dart';
 
 /// A status service that answers whatever it is told to.
 class _FakeStatus implements ServerStatusService {
@@ -210,6 +211,9 @@ void main() {
 
   /// Taps [label] and gives the app two frames to react.
   Future<void> tap(WidgetTester tester, String label) async {
+    // The front door is a phone's height; the test window is shorter.
+    await tester.ensureVisible(find.text(label));
+    await tester.pump();
     await tester.tap(find.text(label));
     await tester.pump();
     await tester.pump();
@@ -233,7 +237,7 @@ void main() {
       await pump(tester, store: store);
 
       await tap(tester, 'Beach');
-      await tap(tester, 'Continue as Ada');
+      await tapEnter(tester);
 
       final world = tester.widget<WorldScreen>(find.byType(WorldScreen));
       expect(world.mapId, equals(MapId.beach));
@@ -247,7 +251,7 @@ void main() {
       await store.writeMapId(MapId.beach);
 
       await pump(tester, store: store);
-      await tap(tester, 'Continue as Ada');
+      await tapEnter(tester);
 
       expect(
         tester.widget<WorldScreen>(find.byType(WorldScreen)).mapId,
@@ -263,7 +267,7 @@ void main() {
       SocketFactory? openSocket,
     }) async {
       await pump(tester, store: store, openSocket: openSocket);
-      await tap(tester, 'Continue as Ada');
+      await tapEnter(tester);
     }
 
     testWidgets('the HUD offers the other map, and only the other', (

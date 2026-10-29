@@ -14,6 +14,7 @@ import 'package:protocol/protocol.dart';
 
 import '../support/fake_identity_store.dart';
 import '../support/fake_socket.dart';
+import '../support/front_door.dart';
 
 class _FakeConfig implements AppConfigRepository {
   const _FakeConfig([this.config = AppConfig.defaults]);
@@ -68,7 +69,7 @@ void main() {
     );
     await tester.pump();
     await tester.pump();
-    await tester.tap(find.text('Continue as Ada'));
+    await tapEnter(tester);
     await tester.pump();
     await tester.pump();
     await tester.pump();

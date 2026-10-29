@@ -1,7 +1,6 @@
 import 'dart:async';
 
 import 'package:client/core/theme.dart';
-import 'package:client/features/world/view/hud_chip.dart';
 import 'package:client/game/world_hud.dart';
 import 'package:flutter/foundation.dart' show ValueListenable;
 import 'package:flutter/material.dart';
@@ -81,17 +80,27 @@ class _WorldToastViewState extends State<WorldToastView> {
         opacity: toast == null ? 0 : 1,
         duration: widget.fade,
         curve: Curves.easeOut,
-        child: HudChip(
-          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 11),
-          child: Text(
-            // The last message is kept while the widget fades out, so the
-            // text does not vanish a fifth of a second before the pill does.
-            toast?.message ?? '',
-            textAlign: TextAlign.center,
-            style: const TextStyle(
-              color: AppTheme.ink,
-              fontSize: 13,
-              fontWeight: FontWeight.w600,
+        // An ink pill, not a white card: the one HUD element that speaks
+        // rather than waits to be tapped, so it is the one dark thing among
+        // the stickers — read in passing, without being mistaken for a
+        // button.
+        child: DecoratedBox(
+          decoration: BoxDecoration(
+            color: ToyboxColors.ink,
+            borderRadius: BorderRadius.circular(999),
+          ),
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 11),
+            child: Text(
+              // The last message is kept while the widget fades out, so the
+              // text does not vanish a fifth of a second before the pill does.
+              toast?.message ?? '',
+              textAlign: TextAlign.center,
+              style: const TextStyle(
+                color: ToyboxColors.cream,
+                fontSize: 13,
+                fontWeight: FontWeight.w700,
+              ),
             ),
           ),
         ),

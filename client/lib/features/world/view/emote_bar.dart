@@ -3,22 +3,38 @@ import 'package:client/features/world/view/hud_chip.dart';
 import 'package:flutter/material.dart';
 import 'package:protocol/protocol.dart';
 
-/// The reaction button and its picker.
+/// The reaction button and its picker, as the bottom dock.
 ///
-/// Closed, it is one button. Open, it is a short row of reactions that fold
-/// away again the moment one is picked. That shape is chosen because this is a
-/// **phone held in one hand while walking** — a grid of twenty reactions is a
-/// thing you stop to read, and stopping is the opposite of what an emote is
-/// for.
+/// Closed, it is a button in a card. Open, a short row of reactions rises
+/// above it and folds away again the moment one is picked. That shape is
+/// chosen because this is a **phone held in one hand while walking** — a
+/// grid of twenty reactions is a thing you stop to read, and stopping is the
+/// opposite of what an emote is for.
+///
+/// Since Phase 15 the card is also the dock: on a phone, [leading] and
+/// [trailing] put the menu and Share in the same card, beside the reactions,
+/// so the bottom corner opposite the joystick holds every control a thumb
+/// reaches for and the top corners are left to the world.
 ///
 /// The list of reactions comes from [EmoteKind] in `protocol/`, so the picker
 /// cannot offer a reaction the server would refuse.
 class EmoteBar extends StatefulWidget {
   /// Creates the bar.
-  const EmoteBar({required this.onEmote, super.key});
+  const EmoteBar({
+    required this.onEmote,
+    super.key,
+    this.leading = const [],
+    this.trailing = const [],
+  });
 
   /// Called with the reaction the player picked.
   final void Function(EmoteKind emote) onEmote;
+
+  /// Dock buttons before the reactions button.
+  final List<Widget> leading;
+
+  /// Dock buttons after the reactions button.
+  final List<Widget> trailing;
 
   @override
   State<EmoteBar> createState() => _EmoteBarState();
@@ -36,6 +52,19 @@ class _EmoteBarState extends State<EmoteBar> {
 
   @override
   Widget build(BuildContext context) {
+    final buttons = [
+      ...widget.leading,
+      DockButton(
+        icon: _open ? Icons.close : Icons.emoji_emotions_outlined,
+        semanticLabel: _open ? 'Close reactions' : 'Reactions',
+        // Lit while open, so the button reads as the thing the row above
+        // belongs to.
+        fill: _open ? ToyboxColors.sky : ToyboxColors.cream,
+        onTap: () => setState(() => _open = !_open),
+      ),
+      ...widget.trailing,
+    ];
+
     return Column(
       mainAxisSize: MainAxisSize.min,
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -45,32 +74,40 @@ class _EmoteBarState extends State<EmoteBar> {
           curve: Curves.easeOut,
           alignment: Alignment.bottomLeft,
           child: _open
-              ? HudChip(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 6,
-                    vertical: 4,
-                  ),
-                  child: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      for (final emote in EmoteKind.values)
-                        _EmoteButton(
-                          emote: emote,
-                          onTap: () => _pick(emote),
-                        ),
-                    ],
+              ? Padding(
+                  padding: const EdgeInsets.only(bottom: 10),
+                  child: HudChip(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 6,
+                      vertical: 4,
+                    ),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        for (final emote in EmoteKind.values)
+                          _EmoteButton(
+                            emote: emote,
+                            onTap: () => _pick(emote),
+                          ),
+                      ],
+                    ),
                   ),
                 )
               : const SizedBox.shrink(),
         ),
-        const SizedBox(height: 8),
-        HudChip(
-          onTap: () => setState(() => _open = !_open),
-          padding: const EdgeInsets.all(12),
-          child: Icon(
-            _open ? Icons.close : Icons.emoji_emotions_outlined,
-            size: 22,
-            color: _open ? AppTheme.mutedInk : AppTheme.ink,
+        DecoratedBox(
+          decoration: ToyboxShape.card(radius: 22),
+          child: Padding(
+            padding: const EdgeInsets.all(6),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                for (final (i, button) in buttons.indexed) ...[
+                  if (i > 0) const SizedBox(width: 6),
+                  button,
+                ],
+              ],
+            ),
           ),
         ),
       ],

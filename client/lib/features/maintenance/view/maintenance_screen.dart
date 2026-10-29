@@ -232,7 +232,7 @@ class _MaintenanceScreenState extends State<MaintenanceScreen> {
                 const Icon(
                   Icons.construction,
                   size: 40,
-                  color: AppTheme.warn,
+                  color: LanyardColors.blue,
                 ),
                 const SizedBox(height: 16),
                 Text(
@@ -240,14 +240,17 @@ class _MaintenanceScreenState extends State<MaintenanceScreen> {
                   textAlign: TextAlign.center,
                   style: Theme.of(context).textTheme.headlineSmall?.copyWith(
                     fontWeight: FontWeight.w700,
-                    color: AppTheme.ink,
+                    color: LanyardColors.ink,
                   ),
                 ),
                 const SizedBox(height: 12),
                 Text(
                   _sentence(message, clock),
                   textAlign: TextAlign.center,
-                  style: const TextStyle(color: AppTheme.ink, fontSize: 15),
+                  style: const TextStyle(
+                    color: LanyardColors.ink,
+                    fontSize: 15,
+                  ),
                 ),
                 if (left != null && widget.showTimer) ...[
                   const SizedBox(height: 20),
@@ -255,7 +258,7 @@ class _MaintenanceScreenState extends State<MaintenanceScreen> {
                     'about ${formatCountdown(left)} to go',
                     textAlign: TextAlign.center,
                     style: const TextStyle(
-                      color: AppTheme.mutedInk,
+                      color: LanyardColors.mutedInk,
                       fontSize: 20,
                       fontWeight: FontWeight.w700,
                       fontFeatures: [FontFeature.tabularFigures()],
@@ -282,7 +285,7 @@ class _MaintenanceScreenState extends State<MaintenanceScreen> {
                   'Your name and your bean are safe on this device. You will '
                   'come back as yourself.',
                   textAlign: TextAlign.center,
-                  style: TextStyle(color: AppTheme.mutedInk, fontSize: 12),
+                  style: TextStyle(color: LanyardColors.mutedInk, fontSize: 12),
                 ),
               ],
             ),

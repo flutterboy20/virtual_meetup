@@ -1,3 +1,4 @@
+import 'package:client/core/theme.dart';
 import 'package:client/core/world_palette.dart';
 import 'package:client/features/world/view/hud_chip.dart';
 import 'package:client/game/world_hud.dart';
@@ -82,28 +83,27 @@ class _MinimapPainter extends CustomPainter {
     final scaleX = size.width / spec.width;
     final scaleY = size.height / spec.height;
 
-    // The ground the venue sits on, so the two void corners read as outside
-    // the building rather than as two holes in the map.
-    canvas.drawRect(
-      Offset.zero & size,
-      Paint()..color = WorldPalette.outside,
-    );
-
+    // Rooms as rounded tiles with a hairline of card showing between them,
+    // the way the mockup draws them. The two void corners are left as bare
+    // card: on a white sticker, nothing reads as "outside the building"
+    // better than nothing — the old paving-coloured fill there was chosen
+    // for a dark pill, where an empty corner looked like a hole.
+    final gap = 1.5 * (size.width / Minimap.deskWidth).clamp(0.6, 1.0);
+    final corner = Radius.circular(size.width / 30);
     for (final zone in spec.zones) {
       final rect = zone.rect;
-      canvas.drawRect(
-        Rect.fromLTRB(
-          rect.left * scaleX,
-          rect.top * scaleY,
-          rect.right * scaleX,
-          rect.bottom * scaleY,
+      canvas.drawRRect(
+        RRect.fromRectAndRadius(
+          Rect.fromLTRB(
+            rect.left * scaleX + gap,
+            rect.top * scaleY + gap,
+            rect.right * scaleX - gap,
+            rect.bottom * scaleY - gap,
+          ),
+          corner,
         ),
-        // The zone's own **floor** colour, at full strength. Before the
-        // daylight rebase this drew a washed-out accent, because seven dark
-        // floors were seven shades of the same dark at 116 pixels wide. Light
-        // floors do not have that problem, so the honest mapping — the map is
-        // painted in the colours the room is painted in — is now also the
-        // readable one.
+        // The zone's own **floor** colour, at full strength: the map is
+        // painted in the colours the room is painted in.
         Paint()..color = WorldPalette.of(zone).floor,
       );
     }
@@ -125,7 +125,7 @@ class _MinimapPainter extends CustomPainter {
     // standing in the middle of a crowd of dots.
     final you = Offset(frame.you.dx * scaleX, frame.you.dy * scaleY);
     canvas
-      ..drawCircle(you, 4.6, Paint()..color = const Color(0xE60B1A22))
+      ..drawCircle(you, 4.6, Paint()..color = ToyboxColors.ink)
       ..drawCircle(you, 3, Paint()..color = WorldPalette.you);
   }
 

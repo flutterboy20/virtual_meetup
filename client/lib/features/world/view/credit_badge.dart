@@ -54,13 +54,13 @@ class CreditBadge extends StatelessWidget {
         child: Row(
           mainAxisSize: MainAxisSize.min,
           children: [
-            const Icon(Icons.qr_code_2, size: 14, color: AppTheme.mutedInk),
+            const Icon(Icons.qr_code_2, size: 14, color: ToyboxColors.mutedInk),
             if (!compact) ...[
               const SizedBox(width: 6),
               const Text(
                 Credits.builtBy,
                 style: TextStyle(
-                  color: AppTheme.mutedInk,
+                  color: ToyboxColors.mutedInk,
                   fontSize: 11,
                   fontWeight: FontWeight.w600,
                 ),
@@ -78,7 +78,7 @@ class CreditBadge extends StatelessWidget {
     unawaited(
       showModalBottomSheet<void>(
         context: context,
-        backgroundColor: AppTheme.surface,
+        backgroundColor: ToyboxColors.cream,
         showDragHandle: true,
         builder: (context) => _QrSheet(link: link),
       ),
@@ -108,7 +108,7 @@ class _QrSheet extends StatelessWidget {
             const Text(
               Credits.builtBy,
               style: TextStyle(
-                color: AppTheme.ink,
+                color: ToyboxColors.ink,
                 fontSize: 16,
                 fontWeight: FontWeight.w800,
               ),
@@ -117,7 +117,7 @@ class _QrSheet extends StatelessWidget {
             const Text(
               'This world is open source. Scan to read how it works.',
               textAlign: TextAlign.center,
-              style: TextStyle(color: AppTheme.mutedInk, fontSize: 12),
+              style: TextStyle(color: ToyboxColors.mutedInk, fontSize: 12),
             ),
             const SizedBox(height: 18),
             Container(
@@ -165,11 +165,11 @@ class _QrSheet extends StatelessWidget {
                           Credits.linkLabel(link),
                           textAlign: TextAlign.center,
                           style: const TextStyle(
-                            color: AppTheme.good,
+                            color: ToyboxColors.good,
                             fontSize: 12,
                             fontWeight: FontWeight.w600,
                             decoration: TextDecoration.underline,
-                            decorationColor: AppTheme.good,
+                            decorationColor: ToyboxColors.good,
                           ),
                         ),
                       ),
@@ -177,7 +177,7 @@ class _QrSheet extends StatelessWidget {
                       const Icon(
                         Icons.open_in_new,
                         size: 13,
-                        color: AppTheme.good,
+                        color: ToyboxColors.good,
                       ),
                     ],
                   ),

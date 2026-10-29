@@ -71,8 +71,18 @@ class NametagLayer extends Component {
   /// changes, which is a handful per second across the whole crowd.
   static const int alphaSteps = 8;
 
-  static const Color _ink = Color(0xFFEAF6FB);
-  static const Color _backdrop = Color(0xFF0B1A22);
+  // The HUD's toybox colours, repeated rather than imported: `core/theme.dart`
+  // pulls in `material.dart`, and this file runs in the render loop. A test
+  // holds the two copies equal.
+
+  /// The tag's text and outline: `ToyboxColors.ink`.
+  static const Color ink = Color(0xFF1B2730);
+
+  /// The tag's card: `ToyboxColors.card`.
+  static const Color card = Color(0xFFFFFFFF);
+
+  /// The text on your own, dark, tag: `ToyboxColors.cream`.
+  static const Color cream = Color(0xFFFFF4E0);
 
   /// Where everybody else is.
   final RemotePlayers remotePlayers;
@@ -136,7 +146,7 @@ class NametagLayer extends Component {
     }
     final me = localTag();
     if (me != null) {
-      _tagFor(me.id, me.name).render(canvas, me.bean, me.alpha);
+      _tagFor(me.id, me.name, isLocal: true).render(canvas, me.bean, me.alpha);
     }
   }
 
@@ -233,10 +243,10 @@ class NametagLayer extends Component {
     return (t * alphaSteps).ceilToDouble() / alphaSteps;
   }
 
-  _Tag _tagFor(String id, String name) {
+  _Tag _tagFor(String id, String name, {bool isLocal = false}) {
     final existing = _tags[id];
     if (existing != null && existing.name == name) return existing;
-    final tag = _Tag(name);
+    final tag = _Tag(name, isLocal: isLocal);
     _tags[id] = tag;
     return tag;
   }
@@ -270,16 +280,37 @@ class VisibleTag {
 }
 
 /// One player's name, with its laid-out text cached per opacity step.
+///
+/// Drawn as a toybox sticker since Phase 15: a white pill with an ink outline,
+/// a dot in the bean's own colour, and the name in ink. The dot is what ties
+/// a name to a body in a crowd — two "Rahul"s side by side are told apart by
+/// colour faster than by position. Your own tag is the inverse, an ink pill
+/// with cream text, so it is the one dark thing in a row of white ones.
 class _Tag {
-  _Tag(this.name);
+  _Tag(this.name, {this.isLocal = false});
 
   /// Widest a tag may get before the name wraps, in world units.
   static const double maxWidth = 200;
 
+  /// Diameter of the colour dot, and the gap after it, in world units.
+  static const double dot = 7;
+  static const double dotGap = 5;
+
   /// The name this tag was built for. A rename rebuilds the tag.
   final String name;
 
+  /// Whether this is your own tag, drawn dark.
+  final bool isLocal;
+
   final Map<int, Paragraph> _byAlpha = {};
+
+  // Shared and mutated rather than allocated per draw: up to eleven tags a
+  // frame, four paints each, is garbage that shows up as a stutter.
+  static final Paint _fill = Paint();
+  static final Paint _outline = Paint()
+    ..style = PaintingStyle.stroke
+    ..strokeWidth = 1.5;
+  static final Paint _dotPaint = Paint();
 
   void render(Canvas canvas, BeanComponent bean, double alpha) {
     if (alpha <= 0) return;
@@ -287,29 +318,44 @@ class _Tag {
     final paragraph = _byAlpha.putIfAbsent(step, () => _build(step));
 
     // The paragraph is laid out to its own width, so its box is the text's
-    // box: centring one centres the other. Laying out to a fixed 200 and
-    // measuring the text instead put the slab under a centred line of text
-    // that was not where the slab was.
-    final width = paragraph.width;
-    final left = bean.position.x - width / 2;
+    // box. The pill is that box plus the dot in front of it, centred over
+    // the bean as one piece.
+    final textWidth = paragraph.width;
+    final lead = isLocal ? 0.0 : dot + dotGap;
+    final pillWidth = lead + textWidth + 14;
+    final pillHeight = paragraph.height + 6;
+    final left = bean.position.x - pillWidth / 2;
     final top =
-        bean.position.y - bean.size.y - NametagLayer.tagLift - paragraph.height;
+        bean.position.y - bean.size.y - NametagLayer.tagLift - pillHeight;
+    final pill = RRect.fromRectAndRadius(
+      Rect.fromLTWH(left, top, pillWidth, pillHeight),
+      Radius.circular(pillHeight / 2),
+    );
 
-    // A slab behind the text, because a light name over a light bean over a
-    // light floor is unreadable exactly when the room is busiest.
+    // A solid card, not a tint: a light name over a light bean over a light
+    // floor is unreadable exactly when the room is busiest, and the outline
+    // keeps the card a card over the white of the code lab.
+    _fill.color = (isLocal ? NametagLayer.ink : NametagLayer.card).withValues(
+      alpha: alpha,
+    );
+    _outline.color = NametagLayer.ink.withValues(alpha: alpha);
     canvas
-      ..drawRRect(
-        RRect.fromRectAndRadius(
-          Rect.fromLTWH(left - 5, top - 2, width + 10, paragraph.height + 4),
-          const Radius.circular(6),
-        ),
-        Paint()..color = NametagLayer._backdrop.withValues(alpha: 0.62 * alpha),
-      )
-      ..drawParagraph(paragraph, Offset(left, top));
+      ..drawRRect(pill, _fill)
+      ..drawRRect(pill, _outline);
+    if (!isLocal) {
+      _dotPaint.color = bean.appearance.bodyColor.withValues(alpha: alpha);
+      canvas.drawCircle(
+        Offset(left + 7 + dot / 2, top + pillHeight / 2),
+        dot / 2,
+        _dotPaint,
+      );
+    }
+    canvas.drawParagraph(paragraph, Offset(left + 7 + lead, top + 3));
   }
 
   Paragraph _build(int step) {
     final alpha = step / NametagLayer.alphaSteps;
+    final color = isLocal ? NametagLayer.cream : NametagLayer.ink;
     Paragraph layout(double width) {
       final builder =
           ParagraphBuilder(
@@ -320,9 +366,7 @@ class _Tag {
                 textAlign: TextAlign.center,
               ),
             )
-            ..pushStyle(
-              TextStyle(color: NametagLayer._ink.withValues(alpha: alpha)),
-            )
+            ..pushStyle(TextStyle(color: color.withValues(alpha: alpha)))
             ..addText(name);
       return builder.build()..layout(ParagraphConstraints(width: width));
     }

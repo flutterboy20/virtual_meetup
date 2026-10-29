@@ -139,14 +139,14 @@ class _FullScreenState extends State<FullScreen> {
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
-                const Icon(Icons.groups, size: 40, color: AppTheme.warn),
+                const Icon(Icons.groups, size: 40, color: LanyardColors.blue),
                 const SizedBox(height: 16),
                 Text(
                   'The event is full',
                   textAlign: TextAlign.center,
                   style: Theme.of(context).textTheme.headlineSmall?.copyWith(
                     fontWeight: FontWeight.w700,
-                    color: AppTheme.ink,
+                    color: LanyardColors.ink,
                   ),
                 ),
                 const SizedBox(height: 12),
@@ -155,13 +155,16 @@ class _FullScreenState extends State<FullScreen> {
                       'Every seat is taken right now. We will let you in as '
                           'soon as somebody leaves.',
                   textAlign: TextAlign.center,
-                  style: const TextStyle(color: AppTheme.ink, fontSize: 15),
+                  style: const TextStyle(
+                    color: LanyardColors.ink,
+                    fontSize: 15,
+                  ),
                 ),
                 const SizedBox(height: 8),
                 const Text(
                   'Checking for a free spot…',
                   textAlign: TextAlign.center,
-                  style: TextStyle(color: AppTheme.mutedInk, fontSize: 13),
+                  style: TextStyle(color: LanyardColors.mutedInk, fontSize: 13),
                 ),
                 const SizedBox(height: 24),
                 FilledButton(
@@ -184,7 +187,7 @@ class _FullScreenState extends State<FullScreen> {
                   'Your name and your bean are safe on this device. You will '
                   'come back as yourself.',
                   textAlign: TextAlign.center,
-                  style: TextStyle(color: AppTheme.mutedInk, fontSize: 12),
+                  style: TextStyle(color: LanyardColors.mutedInk, fontSize: 12),
                 ),
               ],
             ),
