@@ -1,6 +1,5 @@
 import 'dart:async';
 
-import 'package:client/core/player_identity.dart';
 import 'package:client/services/identity_store.dart';
 import 'package:client/services/server_status_service.dart';
 import 'package:flutter/foundation.dart';
@@ -10,8 +9,8 @@ import 'package:protocol/protocol.dart';
 ///
 /// No `material.dart` import, on purpose — that is what makes this a plain
 /// unit test instead of a widget test (see `client-architecture.md`). It
-/// holds two facts: how many people are in the world, and whether this device
-/// already knows who it is.
+/// holds two facts: how many people are in the world, and where this player
+/// is about to go. Who they are is the badge's business — `SetupViewModel`.
 class WelcomeViewModel extends ChangeNotifier {
   /// Creates the view model.
   ///
@@ -40,7 +39,6 @@ class WelcomeViewModel extends ChangeNotifier {
   bool _disposed = false;
   bool _isLoading = true;
   ServerStatus? _serverStatus;
-  PlayerIdentity? _identity;
   MapId _selectedMap = MapId.conference;
 
   /// Whether the first load is still in flight.
@@ -61,7 +59,7 @@ class WelcomeViewModel extends ChangeNotifier {
   ///
   /// Loaded from the device, so a returning player lands back where they
   /// were, and written back the moment they pick the other one — not when
-  /// they press Join. Somebody who taps Beach and then closes the tab meant
+  /// they scan in. Somebody who taps Beach and then closes the tab meant
   /// the beach.
   MapId get selectedMap => _selectedMap;
 
@@ -78,18 +76,6 @@ class WelcomeViewModel extends ChangeNotifier {
   /// Whether the server answered the last time we asked.
   bool get isServerReachable => _serverStatus is ServerOnline;
 
-  /// The saved identity, or `null` if this device has never been set up.
-  PlayerIdentity? get identity => _identity;
-
-  /// Whether this device already has a name and a bean.
-  ///
-  /// The whole point of the welcome screen's Join button: a returning player
-  /// goes straight into the world, and only a new one is sent to setup.
-  bool get isReturning => _identity != null;
-
-  /// The saved display name, for the "continue as…" label.
-  String? get savedName => _identity?.name;
-
   /// Changes which map Join will walk into, and remembers it.
   ///
   /// Returns straight away and persists in the background: the card has to
@@ -102,9 +88,8 @@ class WelcomeViewModel extends ChangeNotifier {
     unawaited(_store.writeMapId(map));
   }
 
-  /// Loads the saved identity and the online count, then starts refreshing.
+  /// Loads the saved map and the online count, then starts refreshing.
   Future<void> load() async {
-    _identity = await _store.readIdentity();
     _selectedMap = await _store.readMapId();
     if (_disposed) return;
     notifyListeners();
@@ -121,16 +106,6 @@ class WelcomeViewModel extends ChangeNotifier {
     if (_disposed) return;
     _serverStatus = result;
     _isLoading = false;
-    notifyListeners();
-  }
-
-  /// Re-reads the saved identity.
-  ///
-  /// Called when returning to this screen from setup, so the Join button
-  /// reflects a name that was chosen while it was off screen.
-  Future<void> reloadIdentity() async {
-    _identity = await _store.readIdentity();
-    if (_disposed) return;
     notifyListeners();
   }
 

@@ -12,7 +12,6 @@ import 'package:client/features/admin/view_model/admin_view_model.dart';
 import 'package:client/features/app_config/view_model/app_config_view_model.dart';
 import 'package:client/features/full/view/full_screen.dart';
 import 'package:client/features/maintenance/view/maintenance_screen.dart';
-import 'package:client/features/setup/view/setup_screen.dart';
 import 'package:client/features/welcome/view/welcome_screen.dart';
 import 'package:client/features/welcome/view_model/welcome_view_model.dart';
 import 'package:client/features/world/view/world_screen.dart';
@@ -163,11 +162,12 @@ enum AppStage {
   /// Reading the device's saved identity. Milliseconds, usually.
   loading,
 
-  /// The front door.
+  /// The front door, which is also where a name and a bean are chosen.
+  ///
+  /// Phase 15 folded the old `setup` stage into this one: the badge on the
+  /// door is the form. Every path that used to send somebody to setup — a
+  /// first visit, a refused name, a kick, "change my bean" — lands here.
   welcome,
-
-  /// Choosing a name and a bean.
-  setup,
 
   /// In the world.
   world,
@@ -323,19 +323,30 @@ class _AppFlowState extends State<AppFlow> {
     setState(() => _mapId = map);
   }
 
-  void _join() {
+  /// Walks in as [identity], which the front door has just saved.
+  void _join(PlayerIdentity identity) {
     _knockedAfterBan = false;
     // The picker writes straight to the store, so this is where that choice
     // is read back. Doing it here rather than plumbing a callback through the
     // welcome screen keeps one source of truth for "which map am I in".
     unawaited(_syncMap());
     setState(() {
+      _identity = identity;
       _rejectionMessage = null;
-      _stage = _identity == null ? AppStage.setup : AppStage.world;
+      _stage = AppStage.world;
     });
   }
 
-  void _editIdentity() => setState(() => _stage = AppStage.setup);
+  /// Back to the front door, where the badge is edited.
+  void _editIdentity() => setState(() {
+    _rejectionMessage = null;
+    _stage = AppStage.welcome;
+  });
+
+  /// Where to go when the way back in is "try again": the world if this
+  /// device still knows who it is, the front door if it does not.
+  AppStage get _rejoinStage =>
+      _identity == null ? AppStage.welcome : AppStage.world;
 
   /// Forgets this device entirely and goes back to the front door.
   ///
@@ -360,14 +371,6 @@ class _AppFlowState extends State<AppFlow> {
     await _bootstrap();
   }
 
-  void _onSetupDone(PlayerIdentity identity) {
-    setState(() {
-      _identity = identity;
-      _rejectionMessage = null;
-      _stage = AppStage.world;
-    });
-  }
-
   /// Knocks on the door again after a ban.
   ///
   /// **Asks the server by trying to join**, exactly as [_rejoinFromFull] does,
@@ -388,7 +391,7 @@ class _AppFlowState extends State<AppFlow> {
       // reporting on something that has not happened yet.
       _banCheckedAt = null;
       _rejectionMessage = null;
-      _stage = _identity == null ? AppStage.setup : AppStage.world;
+      _stage = _rejoinStage;
     });
   }
 
@@ -398,10 +401,10 @@ class _AppFlowState extends State<AppFlow> {
   /// is here rather than in the world screen because this is where the two
   /// answers to "what now" live.
   ///
-  /// A bad name or a bad session goes back to setup with the server's own
-  /// words, because those are things a person can fix. A ban does not: there
-  /// is nothing to retype, and a form that silently refuses every attempt is
-  /// a worse experience than being told plainly.
+  /// A bad name or a bad session goes back to the front door with the
+  /// server's own words, because those are things a person can fix. A ban
+  /// does not: there is nothing to retype, and a form that silently refuses
+  /// every attempt is a worse experience than being told plainly.
   ///
   /// A kick is the third answer, and it is the reason the client has to be
   /// told about kicks at all: the supervisor would otherwise treat the closed
@@ -409,7 +412,7 @@ class _AppFlowState extends State<AppFlow> {
   /// stops that, and hands the decision to come back to the person — which
   /// is the whole difference between a kick and a bean blinking.
   void _onRejected(JoinRejectedMessage rejection) {
-    // A kick sends them back through setup as a first-timer: name, colour and
+    // A kick sends them back to the door as a first-timer: name, colour and
     // bean, all chosen again. The name is the point — a kick in a world with
     // no chat is almost always about one — and the server will refuse the old
     // one anyway, so a form that arrives pre-filled with it is a form that
@@ -449,7 +452,7 @@ class _AppFlowState extends State<AppFlow> {
         JoinRejection.worldFull => AppStage.full,
         JoinRejection.displaced => AppStage.displaced,
         JoinRejection.invalidName ||
-        JoinRejection.invalidSession => AppStage.setup,
+        JoinRejection.invalidSession => AppStage.welcome,
       };
     });
   }
@@ -499,7 +502,7 @@ class _AppFlowState extends State<AppFlow> {
     if (!mounted || _stage != AppStage.full) return;
     setState(() {
       _rejectionMessage = null;
-      _stage = _identity == null ? AppStage.setup : AppStage.world;
+      _stage = _rejoinStage;
     });
   }
 
@@ -518,7 +521,7 @@ class _AppFlowState extends State<AppFlow> {
     if (_stage != AppStage.displaced) return;
     setState(() {
       _rejectionMessage = null;
-      _stage = _identity == null ? AppStage.setup : AppStage.world;
+      _stage = _rejoinStage;
     });
   }
 
@@ -531,7 +534,7 @@ class _AppFlowState extends State<AppFlow> {
 
     // Above every other stage, and read from the config rather than from
     // `_stage`. A moderator closing the event has to take everybody out of
-    // wherever they are — mid-walk, mid-setup, sitting on the front door —
+    // wherever they are — mid-walk or sitting on the front door —
     // and a rule that only applied to people who happened to try to join
     // would leave everybody who was already inside standing in an empty
     // world. Rebuilding without the world screen is also what disposes its
@@ -539,21 +542,24 @@ class _AppFlowState extends State<AppFlow> {
     final config = context.watch<AppConfigViewModel>().config;
     if (config.isUnderMaintenanceAt(DateTime.now()) ||
         _stage == AppStage.maintenance) {
-      return MaintenanceScreen(
-        until: config.maintenanceUntil,
-        message: config.maintenanceMessage,
-        showTimer: config.maintenanceShowTimer,
-        onRetry: _leaveMaintenance,
+      return Theme(
+        data: AppTheme.lanyard,
+        child: MaintenanceScreen(
+          until: config.maintenanceUntil,
+          message: config.maintenanceMessage,
+          showTimer: config.maintenanceShowTimer,
+          onRetry: _leaveMaintenance,
+        ),
       );
     }
 
-    return switch (_stage) {
+    final screen = switch (_stage) {
       AppStage.loading => const Scaffold(
         body: Center(child: CircularProgressIndicator()),
       ),
       AppStage.welcome => ChangeNotifierProvider<WelcomeViewModel>(
-        // Rebuilt per visit so a name changed in setup shows up on the
-        // button when the player comes back to this screen.
+        // Rebuilt per visit, so the badge starts from whatever identity the
+        // device holds now — a kick having cleared it, say.
         key: ValueKey(_identity),
         create: (_) {
           final model = WelcomeViewModel(
@@ -565,7 +571,16 @@ class _AppFlowState extends State<AppFlow> {
           unawaited(model.load());
           return model;
         },
-        child: WelcomeScreen(onJoin: _join, onEditIdentity: _editIdentity),
+        child: WelcomeScreen(
+          store: widget.store,
+          sessionId: sessionId,
+          identity: _identity,
+          // The server's words, when it sent the player back to fix
+          // something: printed on the badge, right above the name it is
+          // about.
+          notice: _rejectionMessage,
+          onJoin: _join,
+        ),
       ),
       // Handled above, before the config is even consulted for anything
       // else. Present here because the switch is exhaustive and a stage with
@@ -582,7 +597,7 @@ class _AppFlowState extends State<AppFlow> {
       ),
       AppStage.displaced => _RemovedScreen(
         icon: Icons.tab_unselected,
-        iconColor: AppTheme.warn,
+        iconColor: LanyardColors.blue,
         message:
             _rejectionMessage ??
             'This event is open in another tab or window on this device.',
@@ -611,14 +626,9 @@ class _AppFlowState extends State<AppFlow> {
         footer:
             'You will be asked to set up again, with a name you would be '
             'happy to wear on a badge.',
-        onRetry: _join,
-      ),
-      AppStage.setup => _SetupStage(
-        store: widget.store,
-        sessionId: sessionId,
-        identity: _identity,
-        message: _rejectionMessage,
-        onDone: _onSetupDone,
+        // To the front door with a blank badge: a kick forgets the
+        // identity, so there is nothing to walk back in as.
+        onRetry: _editIdentity,
       ),
       AppStage.world => WorldScreen(
         // Keyed on the identity **and the map**, so either one changing
@@ -646,70 +656,19 @@ class _AppFlowState extends State<AppFlow> {
         onRejected: _onRejected,
       ),
     };
-  }
-}
 
-/// The setup screen plus, when there is one, the server's reason for sending
-/// the player back to it.
-class _SetupStage extends StatelessWidget {
-  const _SetupStage({
-    required this.store,
-    required this.sessionId,
-    required this.identity,
-    required this.message,
-    required this.onDone,
-  });
-
-  final IdentityStore store;
-  final String sessionId;
-  final PlayerIdentity? identity;
-  final String? message;
-  final ValueChanged<PlayerIdentity> onDone;
-
-  @override
-  Widget build(BuildContext context) {
-    final screen = SetupScreen(
-      store: store,
-      sessionId: sessionId,
-      identity: identity,
-      onDone: onDone,
-    );
-    final reason = message;
-    if (reason == null) return screen;
-
-    return Stack(
-      children: [
-        screen,
-        Positioned(
-          left: 16,
-          right: 16,
-          bottom: 16,
-          child: Material(
-            color: AppTheme.surface,
-            borderRadius: BorderRadius.circular(12),
-            child: Padding(
-              padding: const EdgeInsets.all(14),
-              child: Row(
-                children: [
-                  const Icon(
-                    Icons.info_outline,
-                    color: AppTheme.warn,
-                    size: 18,
-                  ),
-                  const SizedBox(width: 10),
-                  Expanded(
-                    child: Text(
-                      reason,
-                      style: const TextStyle(color: AppTheme.ink, fontSize: 13),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ),
-        ),
-      ],
-    );
+    // Every screen outside the world is printed matter on the same paper as
+    // the badge, so being turned away reads as part of the same venue
+    // rather than as a different app. The world keeps its own look, and the
+    // admin route never comes through here.
+    return switch (_stage) {
+      AppStage.maintenance ||
+      AppStage.full ||
+      AppStage.displaced ||
+      AppStage.removed ||
+      AppStage.kicked => Theme(data: AppTheme.lanyard, child: screen),
+      AppStage.loading || AppStage.welcome || AppStage.world => screen,
+    };
   }
 }
 
@@ -734,7 +693,7 @@ class _RemovedScreen extends StatelessWidget {
     this.note,
     this.onRetry,
     this.icon = Icons.block,
-    this.iconColor = AppTheme.bad,
+    this.iconColor = LanyardColors.alert,
     this.retryLabel = 'Try again',
   });
 
@@ -799,14 +758,17 @@ class _RemovedScreen extends StatelessWidget {
                 Text(
                   message,
                   textAlign: TextAlign.center,
-                  style: const TextStyle(color: AppTheme.ink, fontSize: 15),
+                  style: const TextStyle(
+                    color: LanyardColors.ink,
+                    fontSize: 15,
+                  ),
                 ),
                 const SizedBox(height: 12),
                 Text(
                   footer,
                   textAlign: TextAlign.center,
                   style: const TextStyle(
-                    color: AppTheme.mutedInk,
+                    color: LanyardColors.mutedInk,
                     fontSize: 13,
                   ),
                 ),
@@ -827,7 +789,7 @@ class _RemovedScreen extends StatelessWidget {
                     note,
                     textAlign: TextAlign.center,
                     style: const TextStyle(
-                      color: AppTheme.warn,
+                      color: LanyardColors.ink,
                       fontSize: 12,
                     ),
                   ),
@@ -838,7 +800,7 @@ class _RemovedScreen extends StatelessWidget {
                     hint,
                     textAlign: TextAlign.center,
                     style: const TextStyle(
-                      color: AppTheme.mutedInk,
+                      color: LanyardColors.mutedInk,
                       fontSize: 12,
                     ),
                   ),
@@ -879,7 +841,7 @@ class _SupportLink extends StatelessWidget {
               const Icon(
                 Icons.alternate_email,
                 size: 14,
-                color: AppTheme.good,
+                color: LanyardColors.blue,
               ),
               const SizedBox(width: 6),
               Flexible(
@@ -887,11 +849,11 @@ class _SupportLink extends StatelessWidget {
                   email,
                   textAlign: TextAlign.center,
                   style: const TextStyle(
-                    color: AppTheme.good,
+                    color: LanyardColors.blue,
                     fontSize: 13,
                     fontWeight: FontWeight.w600,
                     decoration: TextDecoration.underline,
-                    decorationColor: AppTheme.good,
+                    decorationColor: LanyardColors.blue,
                   ),
                 ),
               ),

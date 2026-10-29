@@ -15,6 +15,7 @@ import 'package:client/features/world/view/perf_hud.dart';
 import 'package:client/features/world/view/sponsor_panel.dart';
 import 'package:client/features/world/view/world_menu_drawer.dart';
 import 'package:client/features/world/view/world_toast.dart';
+import 'package:client/features/world/view/zone_card.dart';
 import 'package:client/game/beach_map.dart';
 import 'package:client/game/bean_appearance.dart';
 import 'package:client/game/conference_game.dart';
@@ -326,17 +327,17 @@ class _WorldScreenState extends State<WorldScreen> {
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
-        backgroundColor: AppTheme.surface,
+        backgroundColor: ToyboxColors.cream,
         title: const Text('Log out?'),
         content: const Text(
           'This device will forget your name and your bean. You will start '
           'again from the welcome screen.',
-          style: TextStyle(color: AppTheme.mutedInk),
+          style: TextStyle(color: ToyboxColors.mutedInk),
         ),
         actions: [
           TextButton(
             onPressed: () => Navigator.of(context).pop(false),
-            style: TextButton.styleFrom(foregroundColor: AppTheme.mutedInk),
+            style: TextButton.styleFrom(foregroundColor: ToyboxColors.mutedInk),
             child: const Text('Stay'),
           ),
           FilledButton(
@@ -405,20 +406,22 @@ class _WorldScreenState extends State<WorldScreen> {
       // On screen everywhere, and in the drawer as well. Passing the link on
       // is how the room fills up: the person you want in here is standing
       // next to you, and a control they have to go looking for is a control
-      // that gets used once, by the maker, in a demo.
-      HudChip(
-        onTap: () => unawaited(
-          shareApp(context, worldName: widget.appConfig.worldName),
+      // that gets used once, by the maker, in a demo. On a phone it lives in
+      // the dock instead, beside the reactions.
+      if (!isPhone)
+        HudChip(
+          onTap: () => unawaited(
+            shareApp(context, worldName: widget.appConfig.worldName),
+          ),
+          child: const Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(Icons.ios_share, size: 16),
+              SizedBox(width: 6),
+              Text('Share'),
+            ],
+          ),
         ),
-        child: const Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(Icons.ios_share, size: 16),
-            SizedBox(width: 6),
-            Text('Share'),
-          ],
-        ),
-      ),
       if (!isPhone && widget.onEditIdentity != null)
         HudChip(
           onTap: widget.onEditIdentity,
@@ -437,7 +440,7 @@ class _WorldScreenState extends State<WorldScreen> {
           child: const Row(
             mainAxisSize: MainAxisSize.min,
             children: [
-              Icon(Icons.logout, size: 16, color: AppTheme.bad),
+              Icon(Icons.logout, size: 16, color: ToyboxColors.bad),
               SizedBox(width: 6),
               Text('Log out'),
             ],
@@ -474,7 +477,7 @@ class _WorldScreenState extends State<WorldScreen> {
             if (game != null)
               GameWidget(game: game)
             else
-              const ColoredBox(color: AppTheme.background),
+              const ColoredBox(color: ToyboxColors.cream),
             SafeArea(
               child: Padding(
                 padding: const EdgeInsets.all(12),
@@ -486,9 +489,12 @@ class _WorldScreenState extends State<WorldScreen> {
                         mainAxisSize: MainAxisSize.min,
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          if (isPhone)
-                            const _MenuButton()
-                          else ...[
+                          ZoneCard(
+                            frames: _hud.minimap,
+                            spec: MapSpec.of(widget.mapId),
+                          ),
+                          if (!isPhone) ...[
+                            const SizedBox(height: 8),
                             const ConnectionChip(),
                             const SizedBox(height: 8),
                             OnlineBadge(online: _hud.online),
@@ -555,8 +561,26 @@ class _WorldScreenState extends State<WorldScreen> {
                       alignment: emoteOnLeft
                           ? Alignment.bottomLeft
                           : Alignment.bottomRight,
+                      // The dock: on a phone, the menu and Share ride in the
+                      // same card as the reactions, in the bottom corner the
+                      // joystick is not using.
                       child: EmoteBar(
                         onEmote: (emote) => game?.emote(emote),
+                        leading: [if (isPhone) const _MenuButton()],
+                        trailing: [
+                          if (isPhone)
+                            DockButton(
+                              icon: Icons.ios_share,
+                              label: 'Share',
+                              semanticLabel: 'Share this world',
+                              onTap: () => unawaited(
+                                shareApp(
+                                  context,
+                                  worldName: widget.appConfig.worldName,
+                                ),
+                              ),
+                            ),
+                        ],
                       ),
                     ),
                   ],
@@ -585,26 +609,17 @@ class _MenuButton extends StatelessWidget {
     final healthy = phase == ConnectionPhase.connected;
 
     return Builder(
-      builder: (context) => HudChip(
+      builder: (context) => DockButton(
+        icon: Icons.menu,
+        semanticLabel: 'Menu. ${ConnectionChip.labelFor(phase)}',
         onTap: Scaffold.of(context).openDrawer,
-        child: Semantics(
-          button: true,
-          label: 'Menu. ${ConnectionChip.labelFor(phase)}',
-          child: Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              const Icon(Icons.menu, size: 18),
-              if (!healthy) ...[
-                const SizedBox(width: 6),
-                Icon(
-                  ConnectionChip.iconFor(phase),
-                  size: 16,
-                  color: ConnectionChip.colorFor(phase),
-                ),
-              ],
-            ],
-          ),
-        ),
+        badge: healthy
+            ? null
+            : Icon(
+                ConnectionChip.iconFor(phase),
+                size: 16,
+                color: ConnectionChip.colorFor(phase),
+              ),
       ),
     );
   }
@@ -620,7 +635,7 @@ class _BoothWarning extends StatelessWidget {
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          Icon(Icons.storefront_outlined, size: 14, color: AppTheme.warn),
+          Icon(Icons.storefront_outlined, size: 14, color: ToyboxColors.warn),
           SizedBox(width: 6),
           Text('Booths unavailable'),
         ],

@@ -43,7 +43,11 @@ class SelfMarkerComponent extends Component {
   /// Fixed, and deliberately not one of the eight body colours the setup
   /// screen offers: a marker painted in a colour a bean can also be is a
   /// marker that disappears against the one bean it exists to point at.
-  static const Color ringColor = Color(0xFF54C5F8);
+  ///
+  /// Phase 15 took it to the deep sky edge (`ToyboxColors.skyEdge`): the old
+  /// sky was, after all, one of the body colours, and the deeper blue reads
+  /// on every floor in the world, the pale poolside included.
+  static const Color ringColor = Color(0xFF1F7BA6);
 
   /// Width of the steady ring, as a multiple of the bean's body width.
   static const double ringWidth = 1.24;
@@ -90,8 +94,8 @@ class SelfMarkerComponent extends Component {
     const height = width * ringSquash;
 
     _steadyPaint
-      ..color = ringColor.withValues(alpha: 0.55 * visible)
-      ..strokeWidth = 2;
+      ..color = ringColor.withValues(alpha: 0.8 * visible)
+      ..strokeWidth = 3;
     canvas.drawOval(
       Rect.fromCenter(center: centre, width: width, height: height),
       _steadyPaint,
@@ -101,8 +105,8 @@ class SelfMarkerComponent extends Component {
     // it reads as one ring travelling outwards rather than as two rings.
     final scale = 1 + _phase * pulseGrowth;
     _pulsePaint
-      ..color = ringColor.withValues(alpha: (1 - _phase) * 0.45 * visible)
-      ..strokeWidth = 2.4 * (1 - _phase * 0.6);
+      ..color = ringColor.withValues(alpha: (1 - _phase) * 0.6 * visible)
+      ..strokeWidth = 3 * (1 - _phase * 0.6);
     canvas.drawOval(
       Rect.fromCenter(
         center: centre,

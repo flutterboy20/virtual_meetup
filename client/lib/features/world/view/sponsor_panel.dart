@@ -1,6 +1,6 @@
+import 'package:client/core/app_fonts.dart';
 import 'package:client/core/sponsor.dart';
 import 'package:client/core/theme.dart';
-import 'package:client/features/world/view/hud_chip.dart';
 import 'package:flutter/material.dart';
 
 /// The card that opens when you walk up to a booth.
@@ -55,9 +55,10 @@ class _Card extends StatelessWidget {
   Widget build(BuildContext context) {
     return ConstrainedBox(
       constraints: const BoxConstraints(maxWidth: SponsorPanel.maxWidth),
-      child: Material(
-        color: HudChip.background,
-        borderRadius: BorderRadius.circular(16),
+      // The same toybox card as every chip, a size up: a booth is the one
+      // HUD element with a paragraph in it.
+      child: DecoratedBox(
+        decoration: ToyboxShape.card(radius: 20),
         child: Padding(
           padding: const EdgeInsets.fromLTRB(14, 12, 14, 14),
           child: Column(
@@ -71,11 +72,12 @@ class _Card extends StatelessWidget {
                   // the app's UI, and some brand colours are unreadable
                   // behind white text.
                   Container(
-                    width: 12,
-                    height: 12,
+                    width: 16,
+                    height: 16,
                     decoration: BoxDecoration(
                       color: sponsor.color,
-                      borderRadius: BorderRadius.circular(3),
+                      borderRadius: BorderRadius.circular(5),
+                      border: Border.all(color: ToyboxColors.ink, width: 1.5),
                     ),
                   ),
                   const SizedBox(width: 8),
@@ -83,9 +85,10 @@ class _Card extends StatelessWidget {
                     child: Text(
                       sponsor.name,
                       style: const TextStyle(
-                        color: AppTheme.ink,
-                        fontSize: 15,
+                        color: ToyboxColors.ink,
+                        fontSize: 16,
                         fontWeight: FontWeight.w800,
+                        fontFamily: AppFonts.display,
                       ),
                     ),
                   ),
@@ -96,7 +99,7 @@ class _Card extends StatelessWidget {
                 Text(
                   sponsor.tagline,
                   style: const TextStyle(
-                    color: AppTheme.mutedInk,
+                    color: ToyboxColors.mutedInk,
                     fontSize: 11,
                     fontWeight: FontWeight.w600,
                     letterSpacing: 0.4,
@@ -108,7 +111,7 @@ class _Card extends StatelessWidget {
                 Text(
                   sponsor.blurb,
                   style: const TextStyle(
-                    color: AppTheme.ink,
+                    color: ToyboxColors.ink,
                     fontSize: 12,
                     height: 1.35,
                   ),

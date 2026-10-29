@@ -1,7 +1,7 @@
 import 'package:client/app/app.dart';
 import 'package:client/core/player_identity.dart';
 import 'package:client/features/full/view/full_screen.dart';
-import 'package:client/features/setup/view/setup_screen.dart';
+import 'package:client/features/welcome/view/badge_editor.dart';
 import 'package:client/features/welcome/view/welcome_screen.dart';
 import 'package:client/features/world/view/world_screen.dart';
 import 'package:client/services/app_config_repository.dart';
@@ -13,6 +13,7 @@ import 'package:protocol/protocol.dart';
 
 import '../support/fake_identity_store.dart';
 import '../support/fake_socket.dart';
+import '../support/front_door.dart';
 
 class _FakeConfig implements AppConfigRepository {
   @override
@@ -53,7 +54,7 @@ void main() {
     );
     await tester.pump();
     await tester.pump();
-    await tester.tap(find.text('Continue as Ada'));
+    await scanIn(tester);
     await tester.pump();
     await tester.pump();
     await tester.pump();
@@ -73,7 +74,7 @@ void main() {
       await tester.pump();
 
       expect(find.byType(FullScreen), findsOneWidget);
-      expect(find.byType(SetupScreen), findsNothing);
+      expect(find.byType(BadgeEditor), findsNothing);
       expect(find.byType(WorldScreen), findsNothing);
       expect(find.text('The event is full'), findsOneWidget);
     });
@@ -137,7 +138,7 @@ void main() {
       );
       await tester.pump();
       await tester.pump();
-      await tester.tap(find.text('Continue as Ada'));
+      await scanIn(tester);
       await tester.pump();
       await tester.pump();
       await tester.pump();
@@ -176,7 +177,7 @@ void main() {
       );
       await tester.pump();
       await tester.pump();
-      await tester.tap(find.text('Continue as Ada'));
+      await scanIn(tester);
       await tester.pump();
       await tester.pump();
       await tester.pump();

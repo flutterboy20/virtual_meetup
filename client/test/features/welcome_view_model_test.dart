@@ -1,4 +1,3 @@
-import 'package:client/core/player_identity.dart';
 import 'package:client/features/welcome/view_model/welcome_view_model.dart';
 import 'package:client/services/server_status_service.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -25,20 +24,10 @@ class _ScriptedStatusService implements ServerStatusService {
 }
 
 void main() {
-  const saved = PlayerIdentity(
-    sessionId: FakeIdentityStore.testSessionId,
-    name: 'Ada',
-    color: 0xFF54C5F8,
-    cosmetic: PlayerCosmetic.cap,
-  );
-
-  WelcomeViewModel build({
-    ServerStatusService? status,
-    PlayerIdentity? identity,
-  }) {
+  WelcomeViewModel build({ServerStatusService? status}) {
     final model = WelcomeViewModel(
       status: status ?? _ScriptedStatusService(),
-      store: FakeIdentityStore(identity: identity),
+      store: FakeIdentityStore(),
     );
     addTearDown(model.dispose);
     return model;
@@ -116,52 +105,19 @@ void main() {
     });
   });
 
-  group('who this device is', () {
-    test('a fresh device is not returning', () async {
-      final model = build();
-
-      await model.load();
-
-      expect(model.isReturning, isFalse);
-      expect(model.identity, isNull);
-      expect(model.savedName, isNull);
-    });
-
-    test('a device with a saved identity is returning', () async {
-      final model = build(identity: saved);
-
-      await model.load();
-
-      expect(model.isReturning, isTrue);
-      expect(model.savedName, 'Ada');
-      expect(model.identity, equals(saved));
-    });
-
-    test('load reads the identity and the count together', () async {
+  group('loading', () {
+    test('load reads the saved map and the count together', () async {
       final status = _ScriptedStatusService();
-      final model = build(status: status, identity: saved);
+      final store = FakeIdentityStore();
+      await store.writeMapId(MapId.beach);
+      final model = WelcomeViewModel(status: status, store: store);
+      addTearDown(model.dispose);
 
       await model.load();
 
-      expect(model.isReturning, isTrue);
+      expect(model.selectedMap, MapId.beach);
       expect(model.onlineCount, 3);
       expect(status.calls, 1);
-    });
-
-    test('reloadIdentity picks up a name changed off screen', () async {
-      final store = FakeIdentityStore(identity: saved);
-      final model = WelcomeViewModel(
-        status: _ScriptedStatusService(),
-        store: store,
-      );
-      addTearDown(model.dispose);
-      await model.load();
-      expect(model.savedName, 'Ada');
-
-      await store.writeIdentity(saved.copyWith(name: 'Ada L'));
-      await model.reloadIdentity();
-
-      expect(model.savedName, 'Ada L');
     });
   });
 

@@ -28,7 +28,7 @@ class OnlineBadge extends StatelessWidget {
         child: Row(
           mainAxisSize: MainAxisSize.min,
           children: [
-            const Icon(Icons.people_alt, size: 14, color: AppTheme.good),
+            const Icon(Icons.people_alt, size: 14, color: ToyboxColors.good),
             const SizedBox(width: 6),
             // "—" rather than "0" before the first stats message: zero people
             // are online is never true while you are looking at it.

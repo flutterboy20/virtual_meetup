@@ -14,6 +14,7 @@ import 'package:protocol/protocol.dart';
 
 import '../support/fake_identity_store.dart';
 import '../support/fake_socket.dart';
+import '../support/front_door.dart';
 
 /// A config source the test hands answers to, one reload at a time.
 class _FakeConfig implements AppConfigRepository {
@@ -360,7 +361,7 @@ void main() {
         config: AppConfig.defaults,
         identity: returning,
       );
-      await tester.tap(find.text('Continue as Ada'));
+      await scanIn(tester);
       await tester.pump();
       await tester.pump();
       await tester.pump();
@@ -386,7 +387,7 @@ void main() {
         config: AppConfig.defaults,
         identity: returning,
       );
-      await tester.tap(find.text('Continue as Ada'));
+      await scanIn(tester);
       await tester.pump();
       await tester.pump();
       await tester.pump();
@@ -439,7 +440,7 @@ void main() {
         config: AppConfig.defaults,
         identity: returning,
       );
-      await tester.tap(find.text('Continue as Ada'));
+      await scanIn(tester);
       await tester.pump();
       await tester.pump();
       await tester.pump();

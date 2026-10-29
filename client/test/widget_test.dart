@@ -4,7 +4,7 @@ import 'package:client/core/open_link.dart';
 import 'package:client/core/player_identity.dart';
 import 'package:client/core/share_link.dart';
 import 'package:client/core/sponsor.dart';
-import 'package:client/features/setup/view/setup_screen.dart';
+import 'package:client/features/welcome/view/badge_editor.dart';
 import 'package:client/features/welcome/view/welcome_screen.dart';
 import 'package:client/features/world/view/world_screen.dart';
 import 'package:client/game/conference_game.dart';
@@ -17,6 +17,7 @@ import 'package:protocol/protocol.dart';
 
 import 'support/fake_identity_store.dart';
 import 'support/fake_socket.dart';
+import 'support/front_door.dart';
 
 /// A status service that answers whatever the test tells it to.
 class _FakeStatusService implements ServerStatusService {
@@ -85,7 +86,7 @@ void main() {
       await pumpApp(tester);
 
       expect(find.byType(WelcomeScreen), findsOneWidget);
-      expect(find.text('Join'), findsOneWidget);
+      expect(find.text(WelcomeScreen.scanInLabel), findsOneWidget);
     });
 
     testWidgets('shows the live online count', (tester) async {
@@ -100,9 +101,9 @@ void main() {
       await pumpApp(tester, status: const ServerUnreachable());
 
       expect(find.textContaining('Explore!!!'), findsOneWidget);
-      // The Join button is still there. The count decorates the door, it
-      // does not gate it.
-      expect(find.text('Join'), findsOneWidget);
+      // The way in is still there. The count decorates the door, it does
+      // not gate it.
+      expect(find.text(WelcomeScreen.scanInLabel), findsOneWidget);
     });
 
     testWidgets('offers the link before anybody has walked in', (tester) async {
@@ -117,6 +118,8 @@ void main() {
 
       expect(find.text('Share this world'), findsOneWidget);
 
+      await tester.ensureVisible(find.text('Share this world'));
+      await tester.pump();
       await tester.tap(find.text('Share this world'));
       await tester.pump();
 
@@ -136,118 +139,109 @@ void main() {
 
       expect(find.text('About'), findsOneWidget);
 
+      await tester.ensureVisible(find.text('About'));
+      await tester.pump();
       await tester.tap(find.text('About'));
       await tester.pump();
 
       expect(opened, [Credits.aboutPath]);
     });
 
-    testWidgets('Join sends a new player to setup', (tester) async {
+    testWidgets('a new player finds a blank badge on the door', (
+      tester,
+    ) async {
       await pumpApp(tester);
 
-      await tester.tap(find.text('Join'));
-      await tester.pump();
-
-      expect(find.byType(SetupScreen), findsOneWidget);
+      // No second screen: the form is the badge, right here.
+      expect(find.byType(BadgeEditor), findsOneWidget);
+      expect(find.text('Ada'), findsNothing);
     });
 
-    testWidgets('a returning player skips setup entirely', (tester) async {
-      await pumpApp(tester, identity: returning);
-
-      expect(find.text('Continue as Ada'), findsOneWidget);
-
-      await tester.tap(find.text('Continue as Ada'));
-      await tester.pump();
-      await tester.pump();
-
-      expect(find.byType(WorldScreen), findsOneWidget);
-      expect(find.byType(SetupScreen), findsNothing);
-    });
-
-    testWidgets('a returning player can still change their bean', (
+    testWidgets('a returning player finds their badge filled in', (
       tester,
     ) async {
       await pumpApp(tester, identity: returning);
 
-      await tester.tap(find.text('Change name or bean'));
-      await tester.pump();
-
-      expect(find.byType(SetupScreen), findsOneWidget);
-      // Seeded with what they already had, so fixing a typo is an edit.
       expect(find.text('Ada'), findsOneWidget);
+
+      await scanIn(tester);
+
+      expect(find.byType(WorldScreen), findsOneWidget);
+      expect(find.byType(BadgeEditor), findsNothing);
+    });
+
+    testWidgets('a returning player can change their name on the badge', (
+      tester,
+    ) async {
+      final (:socket, :store) = await pumpApp(tester, identity: returning);
+
+      // Seeded with what they already had, so fixing a typo is an edit.
+      await tester.enterText(find.byType(TextField), 'Ada L');
+      await tester.pump();
+      await scanIn(tester);
+
+      expect(find.byType(WorldScreen), findsOneWidget);
+      final saved = await store.readIdentity();
+      expect(saved?.name, equals('Ada L'));
+      expect(saved?.color, equals(returning.color));
+      expect(saved?.sessionId, equals(returning.sessionId));
     });
   });
 
-  group('setup', () {
-    Future<void> openSetup(WidgetTester tester) async {
-      await pumpApp(tester);
-      await tester.tap(find.text('Join'));
-      await tester.pump();
-    }
+  group('the badge', () {
+    FilledButton scanInButton(WidgetTester tester) =>
+        tester.widget<FilledButton>(find.byType(FilledButton));
 
-    testWidgets('the enter button is inert until the name is valid', (
+    testWidgets('the way in is inert until the name is valid', (
       tester,
     ) async {
-      await openSetup(tester);
+      await pumpApp(tester);
 
-      FilledButton enterButton() =>
-          tester.widget<FilledButton>(find.byType(FilledButton));
-
-      expect(enterButton().onPressed, isNull);
+      expect(scanInButton(tester).onPressed, isNull);
 
       await tester.enterText(find.byType(TextField), 'A');
       await tester.pump();
-      expect(enterButton().onPressed, isNull);
+      expect(scanInButton(tester).onPressed, isNull);
 
       await tester.enterText(find.byType(TextField), 'Ada');
       await tester.pump();
-      expect(enterButton().onPressed, isNotNull);
+      expect(scanInButton(tester).onPressed, isNotNull);
     });
 
     testWidgets('a blocked name is refused inline, politely', (tester) async {
-      await openSetup(tester);
+      await pumpApp(tester);
 
       await tester.enterText(find.byType(TextField), 'f.u.c.k');
       await tester.pump();
 
       expect(find.text(NameValidation.blocked.message), findsOneWidget);
-      expect(
-        tester.widget<FilledButton>(find.byType(FilledButton)).onPressed,
-        isNull,
-      );
+      expect(scanInButton(tester).onPressed, isNull);
     });
 
     testWidgets('says nothing at all about an empty field', (tester) async {
-      await openSetup(tester);
+      await pumpApp(tester);
 
       expect(find.text(NameValidation.tooShort.message), findsNothing);
     });
 
-    testWidgets('entering saves the identity and opens the world', (
+    testWidgets('scanning in saves the identity and opens the world', (
       tester,
     ) async {
-      await pumpApp(tester);
-      await tester.tap(find.text('Join'));
-      await tester.pump();
+      final (:socket, :store) = await pumpApp(tester);
 
       await tester.enterText(find.byType(TextField), 'Ada Lovelace');
       await tester.pump();
-      // The screen scrolls; in an 800x600 test viewport the button sits
-      // below the fold.
-      await tester.ensureVisible(find.text('Enter the world'));
-      await tester.pump();
-      await tester.tap(find.text('Enter the world'));
-      await tester.pump();
-      await tester.pump();
+      await scanIn(tester);
 
       expect(find.byType(WorldScreen), findsOneWidget);
+      expect((await store.readIdentity())?.name, equals('Ada Lovelace'));
     });
   });
 
   group('the world', () {
     Future<FakeSocket> enterWorld(WidgetTester tester) async {
       final (:socket, :store) = await pumpApp(tester, identity: returning);
-      await tester.tap(find.text('Continue as Ada'));
+      await scanIn(tester);
       await tester.pump();
       // The world reads its booth config before it builds the game, so it
       // takes one more turn of the loop to appear than it used to.
@@ -304,7 +298,7 @@ void main() {
       expect(tester.takeException(), isNull);
     });
 
-    testWidgets('a rejected join sends the player back to setup', (
+    testWidgets('a rejected join sends the player back to the badge', (
       tester,
     ) async {
       final socket = await enterWorld(tester);
@@ -319,12 +313,12 @@ void main() {
       await tester.pump();
       await tester.pump();
 
-      expect(find.byType(SetupScreen), findsOneWidget);
+      expect(find.byType(BadgeEditor), findsOneWidget);
       // The server's own words, shown rather than swallowed.
       expect(find.text('Please pick a different name.'), findsOneWidget);
     });
 
-    testWidgets('a banned join is not the setup form', (tester) async {
+    testWidgets('a banned join is not the badge form', (tester) async {
       // A form somebody can retype forever, that refuses every attempt, is
       // the cruellest version of this screen. There is nothing to fix — but
       // there is somebody to write to, and a door that can be knocked on.
@@ -340,7 +334,7 @@ void main() {
       await tester.pump();
       await tester.pump();
 
-      expect(find.byType(SetupScreen), findsNothing);
+      expect(find.byType(BadgeEditor), findsNothing);
       expect(
         find.text('A moderator has removed you from this event.'),
         findsOneWidget,
@@ -387,12 +381,14 @@ void main() {
       );
     });
 
-    testWidgets('a kicked player sets up again from scratch', (tester) async {
+    testWidgets('a kicked player starts again from a blank badge', (
+      tester,
+    ) async {
       // The name is what a kick is almost always about, so coming back has to
       // go through the screen where the name is chosen — with nothing
       // pre-filled, because the server will refuse the old one anyway.
       final (:socket, :store) = await pumpApp(tester, identity: returning);
-      await tester.tap(find.text('Continue as Ada'));
+      await scanIn(tester);
       await tester.pump();
       await tester.pump();
       await tester.pump();
@@ -418,15 +414,15 @@ void main() {
       await tester.pump();
       await tester.pump();
 
-      expect(find.byType(SetupScreen), findsOneWidget);
-      // Not 'Continue as Ada', and not a form holding the kicked name.
-      expect(find.byType(WelcomeScreen), findsNothing);
+      // A blank badge: not one holding the kicked name, which the server
+      // would only refuse again.
+      expect(find.byType(BadgeEditor), findsOneWidget);
       expect(find.text('Ada'), findsNothing);
     });
 
     testWidgets('a mis-tapped log out changes nothing', (tester) async {
       final (:socket, :store) = await pumpApp(tester, identity: returning);
-      await tester.tap(find.text('Continue as Ada'));
+      await scanIn(tester);
       await tester.pump();
       await tester.pump();
       await tester.pump();
@@ -449,7 +445,7 @@ void main() {
       tester,
     ) async {
       final (:socket, :store) = await pumpApp(tester, identity: returning);
-      await tester.tap(find.text('Continue as Ada'));
+      await scanIn(tester);
       await tester.pump();
       await tester.pump();
       await tester.pump();
@@ -472,14 +468,9 @@ void main() {
 
       // Back at the front door as a first-timer, not a returning player.
       expect(find.byType(WorldScreen), findsNothing);
+      // A blank badge, as on a fresh phone.
       expect(find.byType(WelcomeScreen), findsOneWidget);
-      expect(find.text('Join'), findsOneWidget);
-      expect(find.text('Continue as Ada'), findsNothing);
-
-      // And Join now goes through setup again, as it does on a fresh phone.
-      await tester.tap(find.text('Join'));
-      await tester.pump();
-      expect(find.byType(SetupScreen), findsOneWidget);
+      expect(find.byType(BadgeEditor), findsOneWidget);
       expect(find.text('Ada'), findsNothing);
     });
 
@@ -504,7 +495,7 @@ void main() {
       await tester.pump();
 
       expect(find.byType(WorldScreen), findsNothing);
-      expect(find.byType(SetupScreen), findsNothing);
+      expect(find.byType(BadgeEditor), findsNothing);
       expect(
         find.text(
           'A moderator removed you from this event. You can rejoin in 30s.',

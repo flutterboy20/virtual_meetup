@@ -57,10 +57,11 @@ class ConnectionChip extends StatelessWidget {
 
   /// The colour this phase is drawn in.
   static Color colorFor(ConnectionPhase phase) => switch (phase) {
-    ConnectionPhase.connected => AppTheme.good,
-    ConnectionPhase.connecting => AppTheme.warn,
-    ConnectionPhase.waiting || ConnectionPhase.reconnecting => AppTheme.warn,
-    ConnectionPhase.idle => AppTheme.mutedInk,
+    ConnectionPhase.connected => ToyboxColors.good,
+    ConnectionPhase.connecting => ToyboxColors.warn,
+    ConnectionPhase.waiting ||
+    ConnectionPhase.reconnecting => ToyboxColors.warn,
+    ConnectionPhase.idle => ToyboxColors.mutedInk,
   };
 
   /// What this phase is called, in words.

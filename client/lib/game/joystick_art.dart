@@ -94,8 +94,12 @@ class JoystickBase extends PositionComponent {
   /// pinned control can give — there is no hover on a phone.
   bool isActive = false;
 
-  static const Color _ringColor = Color(0xFFEAF6FB);
-  static const Color _trackColor = Color(0xFF0C1A22);
+  // The HUD's toybox ink and card, repeated here rather than imported from
+  // `core/theme.dart`, which would pull `material.dart` into the render loop.
+  // The old pale ring on a dark track was a ghost on the daylight floor;
+  // an ink ring over a frosted white track reads on every room in the world.
+  static const Color _ringColor = Color(0xFF1B2730);
+  static const Color _trackColor = Color(0xFFFFFFFF);
 
   final double _radius;
 
@@ -111,13 +115,13 @@ class JoystickBase extends PositionComponent {
     final centre = Offset(_radius, _radius);
 
     _trackPaint.color = _trackColor.withValues(
-      alpha: (isActive ? 0.42 : 0.30) * alpha,
+      alpha: (isActive ? 0.62 : 0.45) * alpha,
     );
     _ringPaint
-      ..color = _ringColor.withValues(alpha: (isActive ? 0.75 : 0.45) * alpha)
-      ..strokeWidth = isActive ? 3.4 : 2.2;
+      ..color = _ringColor.withValues(alpha: (isActive ? 0.9 : 0.7) * alpha)
+      ..strokeWidth = isActive ? 3.4 : 2.5;
     _tickPaint
-      ..color = _ringColor.withValues(alpha: 0.34 * alpha)
+      ..color = _ringColor.withValues(alpha: 0.4 * alpha)
       ..strokeWidth = 2.4;
 
     canvas
@@ -129,7 +133,7 @@ class JoystickBase extends PositionComponent {
         centre,
         _radius * 0.62,
         Paint()
-          ..color = _ringColor.withValues(alpha: 0.16 * alpha)
+          ..color = _ringColor.withValues(alpha: 0.22 * alpha)
           ..style = PaintingStyle.stroke
           ..strokeWidth = 1.4,
       );
@@ -161,33 +165,44 @@ class JoystickKnob extends PositionComponent {
   /// Whether a thumb is currently on the stick.
   bool isActive = false;
 
-  static const Color _knobColor = Color(0xFFEAF6FB);
-  static const Color _rimColor = Color(0xFF0C1A22);
+  // Toybox sky with an ink rim and a hard ink shadow under it: the same
+  // sticker the HUD cards are, so the stick reads as part of the HUD rather
+  // than as something drawn on the floor.
+  static const Color _knobColor = Color(0xFF54C5F8);
+  static const Color _rimColor = Color(0xFF1B2730);
+
+  /// How far the knob's hard shadow drops, in world units.
+  static const double shadowDrop = 3;
 
   final double _radius;
 
   final Paint _fillPaint = Paint();
   final Paint _rimPaint = Paint()..style = PaintingStyle.stroke;
   final Paint _shinePaint = Paint();
+  final Paint _shadowPaint = Paint();
 
   @override
   void render(Canvas canvas) {
     final alpha = fade.opacity;
     final centre = Offset(_radius, _radius);
 
+    _shadowPaint.color = _rimColor.withValues(alpha: 0.9 * alpha);
     _fillPaint.color = _knobColor.withValues(
-      alpha: (isActive ? 0.96 : 0.78) * alpha,
+      alpha: (isActive ? 1 : 0.9) * alpha,
     );
     _rimPaint
-      ..color = _rimColor.withValues(alpha: 0.45 * alpha)
-      ..strokeWidth = 2;
+      ..color = _rimColor.withValues(alpha: 0.95 * alpha)
+      ..strokeWidth = 2.5;
     // A highlight up and left, which is where every other shadow in this
     // world says the light comes from.
     _shinePaint.color = const Color(
       0xFFFFFFFF,
     ).withValues(alpha: 0.55 * alpha);
 
+    // Pressed, the knob sits down on its shadow, the way a toy button does.
+    final drop = isActive ? 1.0 : shadowDrop;
     canvas
+      ..drawCircle(centre.translate(0, drop), _radius, _shadowPaint)
       ..drawCircle(centre, _radius, _fillPaint)
       ..drawCircle(centre, _radius, _rimPaint)
       ..drawCircle(

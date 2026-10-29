@@ -28,7 +28,7 @@ class MakerCredit extends StatelessWidget {
                 Text(
                   'Made by',
                   style: TextStyle(
-                    color: AppTheme.mutedInk,
+                    color: LanyardColors.mutedInk,
                     fontSize: 13,
                     letterSpacing: 1.2,
                   ),
@@ -76,7 +76,7 @@ class _MakerName extends StatelessWidget {
     // The display face, on the one line here that is a name rather than a
     // label. It is the last thing you read on the front door.
     fontFamily: AppFonts.display,
-    color: AppTheme.ink,
+    color: LanyardColors.ink,
     fontSize: 34,
     fontWeight: FontWeight.w800,
     letterSpacing: -0.4,
@@ -124,11 +124,13 @@ class _SocialButton extends StatelessWidget {
             height: _size,
             decoration: BoxDecoration(
               shape: BoxShape.circle,
-              color: AppTheme.surface.withValues(alpha: 0.62),
-              border: Border.all(color: AppTheme.ink.withValues(alpha: 0.09)),
+              color: LanyardColors.badge,
+              border: Border.all(
+                color: LanyardColors.ink.withValues(alpha: 0.14),
+              ),
             ),
             child: asset == null
-                ? Icon(link.icon, size: 17, color: AppTheme.mutedInk)
+                ? Icon(link.icon, size: 17, color: LanyardColors.mutedInk)
                 : Padding(
                     padding: const EdgeInsets.all(9),
                     child: Image.asset(asset),

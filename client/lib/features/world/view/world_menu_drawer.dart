@@ -87,7 +87,7 @@ class WorldMenuDrawer extends StatelessWidget {
     final switchMap = onSwitchMap;
 
     return Drawer(
-      backgroundColor: AppTheme.surface,
+      backgroundColor: ToyboxColors.cream,
       child: SafeArea(
         child: Column(
           children: [
@@ -110,21 +110,21 @@ class WorldMenuDrawer extends StatelessWidget {
                     const ListTile(
                       leading: Icon(
                         Icons.storefront_outlined,
-                        color: AppTheme.warn,
+                        color: ToyboxColors.warn,
                       ),
                       title: Text(
                         'Booths unavailable',
-                        style: TextStyle(color: AppTheme.ink, fontSize: 14),
+                        style: TextStyle(color: ToyboxColors.ink, fontSize: 14),
                       ),
                       subtitle: Text(
                         'The world opened without them.',
                         style: TextStyle(
-                          color: AppTheme.mutedInk,
+                          color: ToyboxColors.mutedInk,
                           fontSize: 12,
                         ),
                       ),
                     ),
-                  const Divider(color: AppTheme.mutedInk, height: 1),
+                  const Divider(color: ToyboxColors.mutedInk, height: 1),
                   _MenuTile(
                     icon: Icons.ios_share,
                     label: 'Share this world',
@@ -154,7 +154,7 @@ class WorldMenuDrawer extends StatelessWidget {
                     _MenuTile(
                       icon: Icons.logout,
                       label: 'Log out',
-                      color: AppTheme.bad,
+                      color: ToyboxColors.bad,
                       onTap: () => _close(context, onLogout!),
                     ),
                 ],
@@ -163,7 +163,7 @@ class WorldMenuDrawer extends StatelessWidget {
             // The credit is the only thing in here that is not a control, so
             // it sits under a rule at the foot of the drawer rather than in
             // among the taps — where a colophon goes on a page.
-            const Divider(color: AppTheme.mutedInk, height: 1),
+            const Divider(color: ToyboxColors.mutedInk, height: 1),
             Padding(
               padding: const EdgeInsets.symmetric(vertical: 12),
               child: Column(
@@ -177,7 +177,7 @@ class WorldMenuDrawer extends StatelessWidget {
                   Text(
                     appVersionLabel(),
                     style: const TextStyle(
-                      color: AppTheme.mutedInk,
+                      color: ToyboxColors.mutedInk,
                       fontSize: 11,
                     ),
                   ),
@@ -198,7 +198,7 @@ class _MenuTile extends StatelessWidget {
     required this.label,
     required this.onTap,
     this.detail,
-    this.color = AppTheme.ink,
+    this.color = ToyboxColors.ink,
   });
 
   final IconData icon;
@@ -226,7 +226,10 @@ class _MenuTile extends StatelessWidget {
           ? null
           : Text(
               detail,
-              style: const TextStyle(color: AppTheme.mutedInk, fontSize: 12),
+              style: const TextStyle(
+                color: ToyboxColors.mutedInk,
+                fontSize: 12,
+              ),
             ),
     );
   }
