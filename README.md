@@ -13,7 +13,7 @@ in. What it is, in one page: [virtualmeetup.dev/about.html](https://virtualmeetu
 <p align="center">
   <img src="docs/screenshots/front-door.webp" width="260" alt="The front door on a phone: a conference badge on a lanyard with your name, bean, colour and hat, the hall signs with live head counts, and the Scan in button.">
   &nbsp;&nbsp;
-  <img src="docs/screenshots/world.webp" width="260" alt="Inside the world on a phone: beans with nametags in the atrium, the minimap, the joystick and the emote button.">
+  <img src="docs/screenshots/world.webp" width="260" alt="Inside the world on a phone, in the garden: your bean on the paved walk with its nametag, the fountain with its jet and gravel ring, stepping stones, a tree whose canopy hides the bot behind it, the room card, the minimap, the joystick, and the dock with menu, reactions and Share.">
 </p>
 
 > **Status:** feature-complete, hardened and deployed.
@@ -72,6 +72,13 @@ venue wifi. The only binary assets are the four bundled typefaces (Archivo and
 Bricolage Grotesque, ~410KB together), which are bundled rather than fetched for the
 same reason: a face that arrives over the network arrives after the wordmark has
 already been painted in something else.
+
+The conference map is drawn as a paper diorama. Props have a height that exists only in
+the paint, with a front face and a shadow from one shared light, so collision never
+changes. Tree canopies and the tops of walls sit in a second recorded layer above the
+beans, which is how someone walks behind a tree without a per-frame sort. Your own bean
+is never hidden. The stage spotlights, water glints, fountain jet and dust are the only
+live layers, and they switch off when your system asks for reduced motion.
 
 You walk through other people, never into them. Player-player collision would turn a
 busy atrium into a traffic jam and give anyone a way to trap somebody in a corner.
