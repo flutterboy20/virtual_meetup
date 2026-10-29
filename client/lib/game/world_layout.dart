@@ -463,6 +463,13 @@ class ConferenceMap extends GameMap {
     ZoneProps.paintPillar(canvas);
     ZoneProps.paintBanners(canvas);
   }
+
+  @override
+  void paintOverhead(Canvas canvas) {
+    ZoneProps.paintFoodCourtOverhead(canvas);
+    ZoneProps.paintGardenOverhead(canvas);
+    ZoneProps.paintBoothsOverhead(canvas, sponsors);
+  }
 }
 
 /// The conference's bot roster, and the palette they are drawn in.

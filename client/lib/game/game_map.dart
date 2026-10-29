@@ -268,4 +268,15 @@ abstract class GameMap {
   /// lights — is deliberately not here. A display list is a recording, and
   /// putting an animation in one freezes its first frame.
   void paintFurniture(Canvas canvas);
+
+  /// Draws the upper parts of tall props, once, into a second recording
+  /// that is replayed **over** the beans: canopies, the tops of walls.
+  ///
+  /// How a bean walks behind something without a per-frame y-sort. The low
+  /// part of a prop stays in [paintFurniture], under everybody; the part a
+  /// bean behind it would be hidden by goes here. Two pictures, two
+  /// `drawPicture` calls, no sorting.
+  ///
+  /// Nothing by default: a map with no tall props has no overhead.
+  void paintOverhead(Canvas canvas) {}
 }

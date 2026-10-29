@@ -119,6 +119,17 @@ class ConferenceGame extends FlameGame with KeyboardEvents, TapCallbacks {
   /// nobody meant to make.
   static const double emoteMinimumGap = 0.3;
 
+  /// Where your own bean sits in the z-order: just over the overhead.
+  ///
+  /// Everybody else's bean is under the canopies and the tops of the walls,
+  /// which is how they walk behind a tree. Yours is not, ever: losing sight
+  /// of yourself under a tree is the one thing the overhead may not cost.
+  static const int ownBeanPriority = FurnitureComponent.overheadPriority + 1;
+
+  /// Where a dive's droplets sit: over your own bean, which is the one
+  /// diving through them.
+  static const int splashPriority = ownBeanPriority + 1;
+
   /// Called when the server pushes a new config.
   ///
   /// The game applies it to itself first and *then* tells the widget layer,
@@ -132,6 +143,9 @@ class ConferenceGame extends FlameGame with KeyboardEvents, TapCallbacks {
 
   /// The recorded furniture, kept so a config edit can re-record it.
   late final FurnitureComponent furniture;
+
+  /// The recorded overhead, kept so a booth edit can re-record it.
+  late final FurnitureComponent overhead;
 
   /// The hall's screen, or `null` on a map with no stage.
   StageScreenComponent? stageScreen;
@@ -347,7 +361,7 @@ class ConferenceGame extends FlameGame with KeyboardEvents, TapCallbacks {
       appearance: appearance,
       animation: BeanAnimation(maxSpeed: beanMaxSpeed),
       map: layout,
-    );
+    )..priority = ownBeanPriority;
     remotePlayers = RemotePlayers(maxSpeed: beanMaxSpeed, map: layout);
     emotes = EmoteLayer();
     crowdGlow = CrowdGlowComponent(
@@ -369,8 +383,11 @@ class ConferenceGame extends FlameGame with KeyboardEvents, TapCallbacks {
     // happens after `onLoad` returns — awaiting it here would deadlock.
     //
     // The order is the z-order: floor, then the crowd glow painted on it,
-    // then water, then furniture, then beans, then the things that must never
-    // be hidden behind a bean — reactions and names.
+    // then water, then furniture, then beans, then the overhead (canopies,
+    // the tops of walls), then the things that must never be hidden behind a
+    // bean — reactions and names. Your own bean and the droplets it dives
+    // through are lifted over the overhead by priority — see
+    // [ownBeanPriority].
     // Whatever was persisted, applied through the setter so the map still
     // gets the last word on whether surfing happens here.
     bean.hasBoard = _unlock.isArmed;
@@ -410,7 +427,9 @@ class ConferenceGame extends FlameGame with KeyboardEvents, TapCallbacks {
         // Droplets go over the beans; the wakes they leave stay under them,
         // inside `water`. A splash you dive *through* and a ripple you swim
         // *on* cannot share one z-order.
-        SplashLayer(field: water.field),
+        SplashLayer(field: water.field)..priority = splashPriority,
+        // The upper parts of tall props, over every bean but yours.
+        overhead = FurnitureComponent.overhead(layout: layout),
         emotes,
         nametags = NametagLayer(
           remotePlayers: remotePlayers,
@@ -501,6 +520,7 @@ class ConferenceGame extends FlameGame with KeyboardEvents, TapCallbacks {
     map.setSponsors(sponsors);
     if (!isLoaded) return;
     furniture.rebuild();
+    overhead.rebuild();
     _rebuildBoothStaff();
   }
 

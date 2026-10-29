@@ -4,6 +4,7 @@ import 'dart:ui';
 import 'package:client/core/app_fonts.dart';
 import 'package:client/core/sponsor.dart';
 import 'package:client/core/world_palette.dart';
+import 'package:client/game/diorama_art.dart';
 import 'package:client/game/world_layout.dart';
 import 'package:protocol/protocol.dart';
 
@@ -36,67 +37,64 @@ abstract final class ZoneProps {
     final colors = WorldPalette.of(WorldZone.foodCourt);
     final counter = rect(WorldLayout.foodCounter);
 
-    // The shade the awning throws, drawn first so everything else sits in it.
-    canvas.drawRRect(
-      RRect.fromRectAndRadius(
-        rect(WorldLayout.courtAwning),
-        const Radius.circular(14),
-      ),
-      Paint()..color = const Color(0x1A2A1206),
+    // The shade the raised awning throws, drawn first so everything else
+    // sits in it. Cast from the awning's height like every other shadow, so
+    // it lands south-east of the canopy rather than straight under it.
+    DioramaArt.paintBoxShadow(
+      canvas,
+      rect(WorldLayout.courtAwning),
+      base: awningBase,
+      height: awningThickness,
     );
 
-    _shadow(canvas, counter);
+    DioramaArt.paintBox(
+      canvas,
+      counter,
+      height: counterHeight,
+      color: _shade(colors.accent, -0.10),
+      corner: corner,
+    );
+    // Everything on the counter stands on its top, so it is painted in a
+    // canvas lifted by the counter's height: the bays, boards and trays keep
+    // their own coordinates and simply ride up with the surface under them.
     canvas
+      ..save()
+      ..translate(0, -counterHeight * DioramaArt.lift)
+      // The serving surface: a lighter inset is what turns a block into a
+      // counter you can imagine putting a tray down on.
       ..drawRRect(
-        RRect.fromRectAndRadius(counter, corner),
-        Paint()..color = _shade(colors.accent, -0.10),
-      )
-      // The serving surface: a lighter top edge is what turns a rectangle
-      // into a counter you can imagine putting a tray down on.
-      ..drawRRect(
-        RRect.fromRectAndRadius(
-          Rect.fromLTRB(
-            counter.left + 6,
-            counter.top + 6,
-            counter.right - 6,
-            counter.bottom - 6,
-          ),
-          corner,
-        ),
+        RRect.fromRectAndRadius(counter.deflate(6), corner),
         Paint()..color = _shade(colors.accent, 0.24),
       );
-
     _paintStallBays(canvas, counter, colors);
     _paintTrays(canvas, counter, colors);
+    canvas.restore();
 
     for (var i = 0; i < WorldLayout.courtStools.length; i++) {
       final stool = WorldLayout.courtStools[i];
       final at = Offset(stool.x, stool.y);
-      canvas
-        ..drawCircle(
-          at.translate(2, 3),
-          stool.radius,
-          Paint()..color = const Color(0x33000000),
-        )
-        ..drawCircle(
-          at,
-          stool.radius,
-          Paint()..color = _shade(colors.accent, 0.10),
-        )
-        // A plate on every other stool. Not on all four: a row of identical
-        // full plates reads as a display case, and the gap is what says
-        // somebody is sitting here and somebody else has not arrived yet.
-        ..drawCircle(
-          at,
-          stool.radius * 0.55,
-          Paint()
-            ..color = i.isEven
-                ? const Color(0xFFF2ECDF)
-                : _shade(colors.accent, -0.16),
-        );
+      DioramaArt.paintCylinder(
+        canvas,
+        at,
+        stool.radius,
+        height: stoolHeight,
+        color: _shade(colors.accent, 0.10),
+      );
+      final seat = DioramaArt.cylinderTop(at, height: stoolHeight);
+      // A plate on every other stool. Not on all four: a row of identical
+      // full plates reads as a display case, and the gap is what says
+      // somebody is sitting here and somebody else has not arrived yet.
+      canvas.drawCircle(
+        seat,
+        stool.radius * 0.55,
+        Paint()
+          ..color = i.isEven
+              ? const Color(0xFFF2ECDF)
+              : _shade(colors.accent, -0.16),
+      );
       if (i.isEven) {
         canvas.drawCircle(
-          at,
+          seat,
           stool.radius * 0.3,
           Paint()..color = const Color(0xFFD9A05B),
         );
@@ -104,11 +102,21 @@ abstract final class ZoneProps {
     }
 
     _paintSnackCart(canvas, colors);
-    _paintAwning(canvas, colors);
 
     for (final planter in WorldLayout.planters) {
       _paintPlanter(canvas, planter.x, planter.y, planter.radius, colors);
     }
+  }
+
+  /// Draws the food court's overhead: the awning and the parasol, over the
+  /// beans.
+  ///
+  /// Both are translucent, because both hang over places people walk. Their
+  /// shadows stay in [paintFoodCourt], on the floor under the beans.
+  static void paintFoodCourtOverhead(Canvas canvas) {
+    final colors = WorldPalette.of(WorldZone.foodCourt);
+    _paintParasol(canvas);
+    _paintAwning(canvas, colors);
   }
 
   /// Three stall bays down the counter: a dosa tawa, a chaat counter and a
@@ -270,32 +278,58 @@ abstract final class ZoneProps {
     }
   }
 
+  /// The samosa cart: a box on wheels, the samosas on top, and a parasol on
+  /// a pole above it.
+  ///
+  /// The parasol is drawn but not collided, like the awning: it is overhead,
+  /// and the pole stands on the cart, which is already solid. Translucent,
+  /// as it always was, because it is over the walk in from the atrium and
+  /// nothing over a walkway may hide a bean.
   static void _paintSnackCart(Canvas canvas, ZoneColors colors) {
     final cart = rect(WorldLayout.snackCart);
-    _shadow(canvas, cart);
-    canvas
-      ..drawRRect(
-        RRect.fromRectAndRadius(cart, corner),
-        Paint()..color = _shade(colors.accent, 0.06),
-      )
-      // A parasol over the cart, offset so it reads as being above it.
-      ..drawCircle(
-        cart.center.translate(0, -6),
-        44,
-        Paint()..color = const Color(0x33F4C542),
-      )
-      ..drawCircle(
-        cart.center.translate(0, -6),
-        44,
-        Paint()
-          ..color = const Color(0x80D89A16)
-          ..style = PaintingStyle.stroke
-          ..strokeWidth = 2.5,
+
+    // The parasol's shadow first, on the ground: it is cast from the canopy's
+    // height, so it lands well south-east of the cart it shades.
+    DioramaArt.paintCylinderShadow(
+      canvas,
+      cart.center,
+      parasolRadius,
+      base: parasolHeight,
+      height: 0,
+    );
+    DioramaArt.paintBox(
+      canvas,
+      cart,
+      base: cartClearance,
+      height: cartHeight,
+      color: _shade(colors.accent, 0.06),
+      corner: corner,
+    );
+
+    // Two wheels under the front edge, in the gap the clearance leaves. What
+    // makes a raised box read as a cart rather than as a floating one.
+    final front = DioramaArt.frontFace(
+      cart,
+      base: cartClearance,
+      height: cartHeight,
+    );
+    for (final x in [front.left + 18, front.right - 18]) {
+      canvas.drawCircle(
+        Offset(x, front.bottom),
+        5,
+        Paint()..color = const Color(0xFF3A2A20),
       );
+    }
+
     // Samosas: three triangles, which is all a samosa needs to be one.
+    final top = DioramaArt.topFace(
+      cart,
+      base: cartClearance,
+      height: cartHeight,
+    );
     final pastry = Paint()..color = const Color(0xFFD9A05B);
     for (var i = 0; i < 3; i++) {
-      final at = Offset(cart.left + 26 + i * 30, cart.center.dy + 4);
+      final at = Offset(top.left + 26 + i * 30, top.center.dy + 4);
       canvas.drawPath(
         Path()
           ..moveTo(at.dx, at.dy - 9)
@@ -305,12 +339,74 @@ abstract final class ZoneProps {
         pastry,
       );
     }
+
+    // The pole. Its top end is under the parasol, which is in the overhead
+    // picture — see [_paintParasol].
+    canvas.drawLine(
+      top.center,
+      DioramaArt.cylinderTop(cart.center, height: parasolHeight),
+      Paint()
+        ..color = const Color(0xFF6B4B3A)
+        ..strokeWidth = 3,
+    );
   }
 
-  static void _paintAwning(Canvas canvas, ZoneColors colors) {
-    final awning = rect(WorldLayout.courtAwning);
-    final shape = RRect.fromRectAndRadius(awning, const Radius.circular(14));
+  /// The parasol over the samosa cart, at the top of its pole.
+  static void _paintParasol(Canvas canvas) {
+    final canopy = DioramaArt.cylinderTop(
+      rect(WorldLayout.snackCart).center,
+      height: parasolHeight,
+    );
     canvas
+      ..drawCircle(
+        canopy,
+        parasolRadius,
+        Paint()..color = const Color(0x33F4C542),
+      )
+      ..drawCircle(
+        canopy,
+        parasolRadius,
+        Paint()
+          ..color = const Color(0x80D89A16)
+          ..style = PaintingStyle.stroke
+          ..strokeWidth = 2.5,
+      );
+  }
+
+  /// The striped awning over the stalls, up on its own height.
+  ///
+  /// Hung from the west wall rather than stood on poles: a pole along its
+  /// east edge would be a drawn thing in the walkway past the stools that a
+  /// player walks straight through, and the only thing worse than an
+  /// invisible wall is a visible non-wall. Still translucent, for the same
+  /// reason the parasol is.
+  static void _paintAwning(Canvas canvas, ZoneColors colors) {
+    final footprint = rect(WorldLayout.courtAwning);
+    final awning = DioramaArt.topFace(
+      footprint,
+      base: awningBase,
+      height: awningThickness,
+    );
+    final valance = DioramaArt.frontFace(
+      footprint,
+      base: awningBase,
+      height: awningThickness,
+    );
+    final shape = RRect.fromRectAndRadius(awning, const Radius.circular(14));
+    // The valance is only the strip under the canvas, not a body under the
+    // whole of it the way `DioramaArt.paintBox` paints one: the canvas is
+    // translucent, so a body under it would show through as a dark awning.
+    // Pulled in from the ends, where the rounded corners curve away from it.
+    canvas
+      ..drawRect(
+        Rect.fromLTRB(
+          valance.left + 10,
+          valance.top,
+          valance.right - 10,
+          valance.bottom,
+        ),
+        Paint()..color = _shade(colors.accent, -0.24).withValues(alpha: 0.7),
+      )
       ..save()
       ..clipRRect(shape);
     // Striped canvas. Alternating bands are the single cheapest thing that
@@ -336,7 +432,7 @@ abstract final class ZoneProps {
           ..strokeWidth = 3,
       );
 
-    // The bulbs strung along the front edge of the awning.
+    // The bulbs strung along the front edge of the awning, up with it.
     for (var y = awning.top + 22; y < awning.bottom; y += 42) {
       final at = Offset(awning.right, y);
       canvas
@@ -344,6 +440,37 @@ abstract final class ZoneProps {
         ..drawCircle(at, 4, Paint()..color = const Color(0xFFFFDCA0));
     }
   }
+
+  /// How tall the food counter is, in world units.
+  static const double counterHeight = 20;
+
+  /// How tall a stool is, in world units.
+  static const double stoolHeight = 12;
+
+  /// How far the snack cart's body stands off the floor on its wheels, in
+  /// world units.
+  static const double cartClearance = 6;
+
+  /// How tall the snack cart's body is, in world units.
+  static const double cartHeight = 18;
+
+  /// How high the parasol's canopy is over the floor, in world units.
+  ///
+  /// Kept low enough that the lifted canopy stays inside the food court
+  /// rather than climbing over its north wall.
+  static const double parasolHeight = 40;
+
+  /// How wide the parasol is, in world units.
+  static const double parasolRadius = 44;
+
+  /// How high the awning hangs over the floor, in world units.
+  ///
+  /// Well over a bean's head, which is what makes it something you walk
+  /// under rather than into.
+  static const double awningBase = 44;
+
+  /// How thick the awning's canvas is, in world units: its valance.
+  static const double awningThickness = 3;
 
   static void _paintPlanter(
     Canvas canvas,
@@ -353,20 +480,32 @@ abstract final class ZoneProps {
     ZoneColors colors,
   ) {
     final at = Offset(x, y);
-    canvas
-      ..drawCircle(
-        at.translate(2, 3),
-        radius,
-        Paint()..color = const Color(0x33000000),
-      )
-      ..drawCircle(at, radius, Paint()..color = _shade(colors.accent, -0.06));
+    // One shadow for pot and shrub together, the full height of both: the
+    // shrub is what sticks up highest, so it is what the light catches.
+    DioramaArt.paintCylinderShadow(
+      canvas,
+      at,
+      radius,
+      height: planterHeight + bushHeight,
+    );
+    DioramaArt.paintCylinder(
+      canvas,
+      at,
+      radius,
+      height: planterHeight,
+      color: _shade(colors.accent, -0.06),
+      shadow: false,
+    );
     // Foliage: five overlapping blobs on a fixed lattice, which reads as a
-    // shrub from three metres up and costs five circles.
+    // shrub from three metres up and costs five circles. The ring sits just
+    // above the soil and the crown at the top of the shrub, so the shrub has
+    // a height of its own rather than being a sticker on the pot.
+    final soil = DioramaArt.cylinderTop(at, height: planterHeight + 2);
     final leaf = Paint()..color = const Color(0xFF4F8F45);
     for (var i = 0; i < 5; i++) {
       final angle = i * 2 * math.pi / 5;
       canvas.drawCircle(
-        at.translate(
+        soil.translate(
           math.cos(angle) * radius * 0.38,
           math.sin(angle) * radius * 0.38,
         ),
@@ -375,15 +514,70 @@ abstract final class ZoneProps {
       );
     }
     canvas.drawCircle(
-      at,
+      DioramaArt.cylinderTop(at, height: planterHeight + bushHeight),
       radius * 0.40,
       Paint()..color = const Color(0xFF62A855),
     );
   }
 
+  /// How tall a planter's pot is, in world units.
+  static const double planterHeight = 18;
+
+  /// How far a planter's shrub stands above its pot, in world units.
+  static const double bushHeight = 10;
+
   // ---- Conference hall (north arm) ----------------------------------------
 
-  /// Draws the stage: light spill, apron, backdrop panels, screen, speakers.
+  /// How tall the stage platform is, in world units.
+  ///
+  /// Height is paint only — see `DioramaArt`. The stage still collides as
+  /// the same flat rectangle it always did; this is how far its deck is
+  /// lifted up the screen and how long a shadow it throws.
+  static const double stageHeight = 12;
+
+  /// How tall a seat row's cushion is, in world units.
+  static const double seatHeight = 8;
+
+  /// How tall a seat row's backrest is, in world units.
+  static const double backrestHeight = 18;
+
+  /// How deep a backrest is, north to south, in world units.
+  static const double backrestDepth = 5;
+
+  /// How tall the shadow cast by something standing on the stage is, in
+  /// world units.
+  ///
+  /// Not the whole height of the thing. The screen is about ninety units of
+  /// upright panel, and a ninety-unit shadow off it would lie across the
+  /// whole deck: the hall is the one dark room, kept dark so that the lit
+  /// stage is the brightest thing in it, and a stage in shadow defeats that.
+  /// The stage lights fill the long shadows in; a short contact shadow, in
+  /// the same direction as every other shadow, is what stays.
+  static const double stageContactShadow = 10;
+
+  /// Where the stage screen's glass is drawn: [WorldLayout.stageScreen],
+  /// standing on the stage and so lifted with its deck.
+  ///
+  /// Public because two things draw here and they must agree: the screen's
+  /// frame in this picture, and `StageScreenComponent`, which draws the
+  /// changing words live on top of it.
+  static Rect get stageScreenFace =>
+      DioramaArt.topFace(rect(WorldLayout.stageScreen), height: stageHeight);
+
+  /// The backrest standing along the south edge of the seat row [seat].
+  ///
+  /// The audience faces north, at the stage, so the back of every seat is
+  /// its south edge — and it is **inside** the row's footprint, so the taller
+  /// half of the row collides exactly where the shorter half always did.
+  static Rect backrest(Rect seat) => Rect.fromLTRB(
+    seat.left,
+    seat.bottom - backrestDepth,
+    seat.right,
+    seat.bottom,
+  );
+
+  /// Draws the stage: light spill, deck, apron, backdrop flats, screen,
+  /// speakers, and the seat rows facing it.
   ///
   /// Every part of this sits **inside** the stage's existing footprint, which
   /// is already one solid rectangle in `WorldLayout.fixedObstacles`. Detail
@@ -407,110 +601,200 @@ abstract final class ZoneProps {
       );
     }
 
-    _shadow(canvas, stage);
+    DioramaArt.paintBox(
+      canvas,
+      stage,
+      height: stageHeight,
+      color: _shade(colors.accent, -0.28),
+      corner: corner,
+    );
+    // Everything below stands on the deck, so the deck is its floor.
+    final deck = DioramaArt.topFace(stage, height: stageHeight);
+
+    // The apron: the lip of the stage a speaker stands on, and the one edge
+    // of this prop the audience actually sees.
     canvas
-      ..drawRRect(
-        RRect.fromRectAndRadius(stage, corner),
-        Paint()..color = _shade(colors.accent, -0.28),
-      )
-      // The backdrop: three panels behind the screen, the outer two darker,
-      // which is what gives a flat rectangle a middle to look at.
       ..drawRect(
-        Rect.fromLTRB(
-          stage.left + 8,
-          stage.top + 8,
-          stage.left + 44,
-          stage.bottom - 30,
-        ),
-        Paint()..color = _shade(colors.accent, -0.10),
-      )
-      ..drawRect(
-        Rect.fromLTRB(
-          stage.right - 44,
-          stage.top + 8,
-          stage.right - 8,
-          stage.bottom - 30,
-        ),
-        Paint()..color = _shade(colors.accent, -0.10),
-      )
-      ..drawRRect(
-        RRect.fromRectAndRadius(rect(WorldLayout.stageScreen), corner),
-        Paint()..color = const Color(0xFF0D1520),
-      )
-      ..drawRRect(
-        RRect.fromRectAndRadius(
-          rect(WorldLayout.stageScreen).deflate(5),
-          const Radius.circular(3),
-        ),
-        Paint()..color = const Color(0x38FFD9A0),
-      )
-      // The apron: the lip of the stage a speaker stands on, and the one edge
-      // of this prop the audience actually sees.
-      ..drawRect(
-        Rect.fromLTRB(
-          stage.left,
-          stage.bottom - 22,
-          stage.right,
-          stage.bottom,
-        ),
+        Rect.fromLTRB(deck.left, deck.bottom - 22, deck.right, deck.bottom),
         Paint()..color = _shade(colors.accent, 0.16),
       )
       ..drawRect(
         Rect.fromLTRB(
-          stage.left,
-          stage.bottom - 22,
-          stage.right,
-          stage.bottom - 18,
+          deck.left,
+          deck.bottom - 22,
+          deck.right,
+          deck.bottom - 18,
         ),
         Paint()..color = const Color(0x66FFE9B0),
       );
 
-    // Speaker stacks at the corners of the apron.
-    for (final x in [stage.left + 6, stage.right - 34]) {
-      final box = Rect.fromLTWH(x, stage.bottom - 62, 28, 40);
+    // Upright panels, each given as the face the audience sees, back to
+    // front so a nearer one is painted over a further one: the two backdrop
+    // flats, then the screen in its frame, then the speakers.
+    final flats = [
+      _upright(
+        Rect.fromLTRB(
+          deck.left + 8,
+          deck.top + 8,
+          deck.left + 44,
+          deck.bottom - 30,
+        ),
+      ),
+      _upright(
+        Rect.fromLTRB(
+          deck.right - 44,
+          deck.top + 8,
+          deck.right - 8,
+          deck.bottom - 30,
+        ),
+      ),
+    ];
+    final frame = _upright(stageScreenFace.inflate(4));
+    final speakers = [
+      for (final x in [deck.left + 6, deck.right - 34])
+        _upright(Rect.fromLTWH(x, deck.bottom - 62, 28, 40), depth: 10),
+    ];
+
+    // Their shadows fall on the deck, so they are clipped to it: a shadow
+    // hanging off the edge of a stage into thin air is the one shadow that
+    // makes the whole thing read as a sticker.
+    canvas
+      ..save()
+      ..clipRRect(RRect.fromRectAndRadius(deck, corner));
+    for (final piece in [...flats, frame, ...speakers]) {
+      DioramaArt.paintBoxShadow(
+        canvas,
+        piece.footprint,
+        height: math.min(piece.height, stageContactShadow),
+      );
+    }
+    canvas.restore();
+
+    for (final flat in flats) {
+      DioramaArt.paintBox(
+        canvas,
+        flat.footprint,
+        height: flat.height,
+        color: _shade(colors.accent, 0.04),
+        front: _shade(colors.accent, -0.10),
+        corner: const Radius.circular(3),
+        shadow: false,
+      );
+    }
+
+    DioramaArt.paintBox(
+      canvas,
+      frame.footprint,
+      height: frame.height,
+      color: _speakerFace,
+      front: _speakerBody,
+      corner: const Radius.circular(3),
+      shadow: false,
+    );
+    canvas
+      ..drawRRect(
+        RRect.fromRectAndRadius(stageScreenFace, corner),
+        Paint()..color = _boothScreen,
+      )
+      ..drawRRect(
+        RRect.fromRectAndRadius(
+          stageScreenFace.deflate(5),
+          const Radius.circular(3),
+        ),
+        Paint()..color = const Color(0x38FFD9A0),
+      );
+
+    for (final speaker in speakers) {
+      DioramaArt.paintBox(
+        canvas,
+        speaker.footprint,
+        height: speaker.height,
+        color: _speakerFace,
+        front: _speakerBody,
+        corner: const Radius.circular(3),
+        shadow: false,
+      );
+      final face = DioramaArt.frontFace(
+        speaker.footprint,
+        height: speaker.height,
+      );
       canvas
-        ..drawRRect(
-          RRect.fromRectAndRadius(box, const Radius.circular(3)),
-          Paint()..color = const Color(0xFF16202C),
-        )
         ..drawCircle(
-          box.center.translate(0, -6),
+          face.center.translate(0, -6),
           7,
-          Paint()..color = const Color(0xFF2C3A4A),
+          Paint()..color = _speakerFace,
         )
         ..drawCircle(
-          box.center.translate(0, 11),
+          face.center.translate(0, 11),
           4,
-          Paint()..color = const Color(0xFF2C3A4A),
+          Paint()..color = _speakerFace,
         );
     }
 
-    // The seating, unchanged in footprint, with a back rail so a row reads as
-    // seats rather than as a bar of colour.
-    final seat = Paint()..color = colors.accent.withValues(alpha: 0.55);
-    final rail = Paint()..color = colors.accent.withValues(alpha: 0.85);
+    // The seating, unchanged in footprint: a cushion, and a taller backrest
+    // along its south edge so a row reads as seats rather than as a bar of
+    // colour. Solid now rather than translucent — a face you can see the
+    // carpet through stops reading as a face — in the colour the translucent
+    // seat used to come out as on this floor.
+    final cushion = Color.alphaBlend(
+      colors.accent.withValues(alpha: 0.55),
+      colors.floor,
+    );
+    final rail = Color.alphaBlend(
+      colors.accent.withValues(alpha: 0.85),
+      colors.floor,
+    );
     for (final row in WorldLayout.seatRows) {
       final at = rect(row.rect);
-      canvas
-        ..drawRRect(RRect.fromRectAndRadius(at, corner), seat)
-        ..drawRRect(
-          RRect.fromRectAndRadius(
-            Rect.fromLTRB(at.left, at.top, at.right, at.top + 5),
-            corner,
-          ),
-          rail,
-        );
-      for (var x = at.left + 29; x < at.right - 10; x += 29) {
+      DioramaArt.paintBox(
+        canvas,
+        at,
+        height: seatHeight,
+        color: cushion,
+        corner: corner,
+      );
+      final top = DioramaArt.topFace(at, height: seatHeight);
+      for (var x = top.left + 29; x < top.right - 10; x += 29) {
         canvas.drawLine(
-          Offset(x, at.top + 6),
-          Offset(x, at.bottom - 2),
+          Offset(x, top.top + 2),
+          Offset(x, top.bottom - 2),
           Paint()
             ..color = const Color(0x3D0B1420)
             ..strokeWidth = 1.6,
         );
       }
+      DioramaArt.paintBox(
+        canvas,
+        backrest(at),
+        height: backrestHeight,
+        color: rail,
+        corner: const Radius.circular(2),
+      );
     }
   }
+
+  static const Color _speakerBody = Color(0xFF16202C);
+  static const Color _speakerFace = Color(0xFF2C3A4A);
+
+  /// An upright panel whose south face is [face]: its footprint, a [depth]
+  /// deep strip along the face's bottom edge, and the height that makes
+  /// `DioramaArt.frontFace` come out as exactly [face].
+  ///
+  /// Given by its face rather than by its footprint because the face is the
+  /// thing with a fixed place: the live screen draws its words at
+  /// [stageScreenFace], and the frame has to be where the words are.
+  static ({Rect footprint, double height}) _upright(
+    Rect face, {
+    double depth = 6,
+  }) => (
+    footprint: Rect.fromLTRB(
+      face.left,
+      face.bottom - depth,
+      face.right,
+      face.bottom,
+    ),
+    height: face.height / DioramaArt.lift,
+  );
 
   // ---- Hanging banners ----------------------------------------------------
 
@@ -583,39 +867,66 @@ abstract final class ZoneProps {
     _paintWhiteboard(canvas, rect(WorldLayout.whiteboard), colors);
 
     for (final desk in WorldLayout.labDesks) {
-      final top = rect(desk.rect);
-      _shadow(canvas, top);
-      canvas
-        ..drawRRect(
-          RRect.fromRectAndRadius(top, corner),
-          Paint()..color = _shade(colors.accent, 0.52),
-        )
-        ..drawRRect(
-          RRect.fromRectAndRadius(
-            Rect.fromLTRB(top.left, top.top, top.right, top.top + 7),
-            corner,
-          ),
-          Paint()..color = _shade(colors.accent, 0.18),
-        );
-      // Monitors along the desk, each with a lit screen. Four small rects per
-      // desk is what turns a table into a lab.
+      final footprint = rect(desk.rect);
+      DioramaArt.paintBox(
+        canvas,
+        footprint,
+        height: deskHeight,
+        color: _shade(colors.accent, 0.52),
+        corner: corner,
+      );
+      final top = DioramaArt.topFace(footprint, height: deskHeight);
+      // The back lip of the desk, where the cables go over.
+      canvas.drawRRect(
+        RRect.fromRectAndRadius(
+          Rect.fromLTRB(top.left, top.top, top.right, top.top + 7),
+          corner,
+        ),
+        Paint()..color = _shade(colors.accent, 0.18),
+      );
+      // Monitors standing along the desk, each facing the person in the
+      // south of it with a lit screen. Four small uprights per desk is what
+      // turns a table into a lab.
       for (var x = top.left + 26; x < top.right - 18; x += 48) {
-        final screen = Rect.fromLTWH(x, top.top + 11, 30, 17);
-        canvas
-          ..drawRRect(
-            RRect.fromRectAndRadius(screen, const Radius.circular(2)),
-            Paint()..color = const Color(0xFF16222E),
-          )
-          ..drawRRect(
-            RRect.fromRectAndRadius(
-              screen.deflate(2.5),
-              const Radius.circular(1.5),
-            ),
-            Paint()..color = const Color(0xFF43C8E0),
-          );
+        final monitor = _upright(
+          Rect.fromLTWH(x, top.top + 11, 30, 17),
+          depth: 4,
+        );
+        DioramaArt.paintBoxShadow(
+          canvas,
+          monitor.footprint,
+          height: deskContactShadow,
+        );
+        DioramaArt.paintBox(
+          canvas,
+          monitor.footprint,
+          height: monitor.height,
+          color: const Color(0xFF2B3440),
+          front: const Color(0xFF16222E),
+          corner: const Radius.circular(2),
+          shadow: false,
+        );
+        final screen = DioramaArt.frontFace(
+          monitor.footprint,
+          height: monitor.height,
+        );
+        canvas.drawRRect(
+          RRect.fromRectAndRadius(
+            screen.deflate(2.5),
+            const Radius.circular(1.5),
+          ),
+          Paint()..color = const Color(0xFF43C8E0),
+        );
       }
     }
   }
+
+  /// How tall a lab desk is, in world units.
+  static const double deskHeight = 16;
+
+  /// How tall the shadow a monitor throws across its desk is, in world
+  /// units: a contact shadow, for the reason the stage's are.
+  static const double deskContactShadow = 6;
 
   static void _paintScreen(
     Canvas canvas,
@@ -623,12 +934,8 @@ abstract final class ZoneProps {
     ZoneColors colors,
     String message,
   ) {
-    _shadow(canvas, at);
+    _paintWallPanel(canvas, at, _shade(colors.accent, -0.42), colors);
     canvas
-      ..drawRRect(
-        RRect.fromRectAndRadius(at, corner),
-        Paint()..color = _shade(colors.accent, -0.42),
-      )
       ..drawRRect(
         RRect.fromRectAndRadius(at.deflate(7), const Radius.circular(3)),
         Paint()..color = const Color(0xFF0E1A24),
@@ -720,17 +1027,36 @@ abstract final class ZoneProps {
 
   static ({String message, double width, Paragraph paragraph})? _boardCache;
 
+  /// A board standing against the lab's north wall, whose face is [face].
+  ///
+  /// The face is exactly the rectangle it always was, so the projected line
+  /// and the scribbles land where they always did; the height shows as a
+  /// thin top edge above it and a shadow on the floor in front of it. Both
+  /// boards are obstacles, and the footprint `_upright` gives them is a strip
+  /// inside the old one, so nothing new collides.
+  static void _paintWallPanel(
+    Canvas canvas,
+    Rect face,
+    Color frame,
+    ZoneColors colors,
+  ) {
+    final panel = _upright(face);
+    DioramaArt.paintBox(
+      canvas,
+      panel.footprint,
+      height: panel.height,
+      color: _shade(colors.accent, -0.12),
+      front: frame,
+      corner: corner,
+    );
+  }
+
   static void _paintWhiteboard(Canvas canvas, Rect at, ZoneColors colors) {
-    _shadow(canvas, at);
-    canvas
-      ..drawRRect(
-        RRect.fromRectAndRadius(at, corner),
-        Paint()..color = _shade(colors.accent, -0.30),
-      )
-      ..drawRRect(
-        RRect.fromRectAndRadius(at.deflate(6), const Radius.circular(3)),
-        Paint()..color = const Color(0xFFF3F7FA),
-      );
+    _paintWallPanel(canvas, at, _shade(colors.accent, -0.30), colors);
+    canvas.drawRRect(
+      RRect.fromRectAndRadius(at.deflate(6), const Radius.circular(3)),
+      Paint()..color = const Color(0xFFF3F7FA),
+    );
     // Scribbles. Two colours and four strokes: anything more legible than
     // this would be a slide, and a slide nobody can read is a smudge.
     final ink = Paint()
@@ -772,80 +1098,121 @@ abstract final class ZoneProps {
     _paintFountain(canvas, colors);
 
     for (final bench in WorldLayout.gardenBenches) {
-      final at = rect(bench.rect);
-      _shadow(canvas, at);
-      canvas
-        ..drawRRect(
-          RRect.fromRectAndRadius(at, corner),
-          Paint()..color = const Color(0xFF9C6B3C),
-        )
-        ..drawRRect(
-          RRect.fromRectAndRadius(
-            Rect.fromLTRB(at.left, at.top, at.right, at.top + 8),
-            corner,
-          ),
-          Paint()..color = const Color(0xFFB58351),
-        );
+      _paintBench(canvas, rect(bench.rect));
     }
 
-    // Trees last, so their canopies fall across everything else — which is
-    // the only shading cue this camera angle can give.
+    // Trunks and shadows only. The canopies are overhead — see
+    // [paintGardenOverhead].
     for (final tree in WorldLayout.gardenTrees) {
-      _paintTree(canvas, tree.x, tree.y, tree.radius, colors);
+      _paintTrunk(canvas, tree.x, tree.y, tree.radius);
     }
+  }
+
+  /// Draws the garden's overhead: the tree canopies, over the beans.
+  ///
+  /// Opaque, unlike the food court's: they stand over lawn rather than over
+  /// a walkway, and a bean under a tree is meant to be under it. Its name
+  /// is still drawn above.
+  static void paintGardenOverhead(Canvas canvas) {
+    for (final tree in WorldLayout.gardenTrees) {
+      _paintCanopy(canvas, tree.x, tree.y, tree.radius);
+    }
+  }
+
+  /// How high the deck's platform stands, in world units — **in the paint
+  /// only**, and less than that: see [_paintSteppedDeck].
+  static const double deckHeight = 15;
+
+  /// How high the tread or platform [step] stands, counting the treads from
+  /// the west (0) and the platform as step [WorldLayout.deckTreads].
+  ///
+  /// Even steps from the lawn up to [deckHeight], so every riser is the
+  /// same size.
+  static double deckStepHeight(int step) =>
+      deckHeight * (step + 1) / (WorldLayout.deckTreads + 1);
+
+  /// The footprint of tread or platform [step]: a north-to-south strip of
+  /// the deck, the treads west of [WorldLayout.deckPlatformX] and the
+  /// platform east of it.
+  static Rect deckStep(int step) {
+    final deck = rect(WorldLayout.gardenDeck);
+    const treads = WorldLayout.deckTreads;
+    if (step == treads) {
+      return Rect.fromLTRB(
+        WorldLayout.deckPlatformX,
+        deck.top,
+        deck.right,
+        deck.bottom,
+      );
+    }
+    final width = (WorldLayout.deckPlatformX - deck.left) / treads;
+    final left = deck.left + step * width;
+    return Rect.fromLTRB(left, deck.top, left + width, deck.bottom);
   }
 
   /// Draws the stepped deck: **fake depth on flat, walkable ground.**
   ///
-  /// Four painted treads and a shadow gradient, climbing east to a platform
-  /// that looks out over the pool. Nothing here is an obstacle and nothing
-  /// here has a height — see `WorldLayout.gardenDeck`. The illusion is
-  /// entirely in the lighting: each tread is lighter than the one before it,
-  /// with a dark riser line on its western side, which is what a flight of
-  /// steps looks like from above at this angle.
+  /// Four painted treads climbing east to a platform that looks out over the
+  /// pool. Nothing here is an obstacle — see `WorldLayout.gardenDeck`.
+  ///
+  /// Since Phase 16 the steps have heights, but **their tops are not
+  /// lifted.** Beans are never lifted, so a bean walking up a lifted deck
+  /// would be drawn inside its front face. Instead each step's south face is
+  /// painted inside its own footprint, rising east like a staircase seen
+  /// from the side, and the deck casts the shadow its heights would: the
+  /// look of height without moving anything a bean stands on.
   static void _paintSteppedDeck(Canvas canvas, ZoneColors colors) {
-    final deck = rect(WorldLayout.gardenDeck);
-    const treadWidth =
-        (WorldLayout.deckPlatformX - 400) / WorldLayout.deckTreads;
+    const steps = WorldLayout.deckTreads + 1;
 
-    // The shadow the whole structure would cast, if it had a height.
-    canvas.drawRRect(
-      RRect.fromRectAndRadius(
-        deck.translate(-6, 8),
-        const Radius.circular(10),
-      ),
-      Paint()..color = const Color(0x33000000),
-    );
+    // One shadow for the whole flight. The steps are added to one path so
+    // where their shadows overlap the floor is darkened once, not twice.
+    final shadow = Path();
+    for (var i = 0; i < steps; i++) {
+      shadow.addPolygon(
+        DioramaArt.boxShadow(deckStep(i), height: deckStepHeight(i)),
+        true,
+      );
+    }
+    canvas.drawPath(shadow, Paint()..color = DioramaArt.shadowColor);
 
     const timber = Color(0xFFB2854E);
-    for (var i = 0; i < WorldLayout.deckTreads; i++) {
-      final left = deck.left + i * treadWidth;
+    for (var i = 0; i < steps; i++) {
+      final step = deckStep(i);
+      // Not lifted: the face of a step on the floor already ends at the
+      // footprint's south edge, so it hangs inside the footprint.
+      final face = DioramaArt.frontFace(step, height: deckStepHeight(i));
+      // Each step a shade lighter than the last, the platform brightest of
+      // all because it is highest: the eye reads a brightness ramp as a
+      // climb.
+      final top = i < WorldLayout.deckTreads
+          ? _shade(timber, -0.20 + i * 0.055)
+          : _shade(timber, 0.10);
       canvas
+        ..drawRect(step, Paint()..color = top)
+        // The riser, on the western face of each step.
         ..drawRect(
-          Rect.fromLTRB(left, deck.top, left + treadWidth, deck.bottom),
-          // Each tread a shade lighter than the last: the eye reads a
-          // brightness ramp as a climb.
-          Paint()..color = _shade(timber, -0.20 + i * 0.055),
-        )
-        // The riser, on the western face of each tread.
-        ..drawRect(
-          Rect.fromLTRB(left, deck.top, left + 5, deck.bottom),
+          Rect.fromLTRB(step.left, step.top, step.left + 5, face.top),
           Paint()..color = const Color(0x59241505),
+        )
+        ..drawRect(
+          face,
+          Paint()..color = _shade(top, DioramaArt.frontShade),
+        )
+        ..drawRect(
+          face,
+          Paint()
+            ..color = DioramaArt.edgeColor
+            ..style = PaintingStyle.stroke,
         );
     }
 
-    // The platform itself, brightest of all because it is highest.
-    final platform = Rect.fromLTRB(
-      WorldLayout.deckPlatformX,
-      deck.top,
-      deck.right,
-      deck.bottom,
-    );
-    canvas.drawRect(platform, Paint()..color = _shade(timber, 0.10));
+    final platform = deckStep(WorldLayout.deckTreads);
+    // Where the platform's top ends and its south face begins.
+    final edge = platform.bottom - deckHeight * DioramaArt.lift;
     final plank = Paint()
       ..color = const Color(0x40241505)
       ..strokeWidth = 1.6;
-    for (var y = platform.top + 18; y < platform.bottom; y += 18) {
+    for (var y = platform.top + 18; y < edge; y += 18) {
       canvas.drawLine(
         Offset(platform.left, y),
         Offset(platform.right, y),
@@ -861,43 +1228,66 @@ abstract final class ZoneProps {
       ..strokeWidth = 4
       ..strokeCap = StrokeCap.round;
     canvas.drawLine(
-      Offset(platform.left + 4, platform.bottom - 5),
-      Offset(platform.right - 4, platform.bottom - 5),
+      Offset(platform.left + 4, edge - 3),
+      Offset(platform.right - 4, edge - 3),
       rail,
     );
     for (var x = platform.left + 10; x < platform.right; x += 34) {
-      canvas.drawLine(
-        Offset(x, platform.bottom - 5),
-        Offset(x, platform.bottom - 22),
-        rail,
-      );
+      canvas.drawLine(Offset(x, edge - 3), Offset(x, edge - 20), rail);
     }
-
-    // The lip where the deck meets the ground, so it does not float.
-    canvas.drawRect(
-      Rect.fromLTRB(deck.left, deck.bottom - 3, deck.right, deck.bottom),
-      Paint()..color = const Color(0x66241505),
-    );
   }
 
+  /// How tall the fountain's basin wall is, in world units.
+  static const double fountainBasinHeight = 10;
+
+  /// How far the fountain's water sits below the top of its wall, in world
+  /// units.
+  static const double fountainWaterDrop = 3;
+
+  /// How thick the fountain's wall is, in world units: the water's radius
+  /// is the basin's minus this.
+  static const double fountainWall = 7;
+
+  /// The centre of the fountain's water surface: inside the basin, a little
+  /// below its rim.
+  ///
+  /// Public because the water is what anything drawn on the fountain later
+  /// has to land on.
+  static Offset get fountainWater => DioramaArt.cylinderTop(
+    Offset(WorldLayout.fountain.x, WorldLayout.fountain.y),
+    height: fountainBasinHeight - fountainWaterDrop,
+  );
+
+  /// The fountain: a stone basin standing on its footprint, and water sunk
+  /// inside its rim.
+  ///
+  /// The water is lower than the rim it sits in, so its circle is drawn
+  /// slightly south of the rim's opening and clipped to it. What that
+  /// leaves uncovered is a thin crescent of the inside wall along the north,
+  /// in shade, the same cue that makes the pool a hole.
   static void _paintFountain(Canvas canvas, ZoneColors colors) {
     final centre = Offset(WorldLayout.fountain.x, WorldLayout.fountain.y);
     final radius = WorldLayout.fountain.radius;
+    final stone = _shade(colors.accent, 0.30);
+    DioramaArt.paintCylinder(
+      canvas,
+      centre,
+      radius,
+      height: fountainBasinHeight,
+      color: stone,
+    );
+
+    final rim = DioramaArt.cylinderTop(centre, height: fountainBasinHeight);
+    final water = fountainWater;
+    final inner = radius - fountainWall;
     canvas
+      ..save()
+      ..clipPath(Path()..addOval(Rect.fromCircle(center: rim, radius: inner)))
+      ..drawCircle(rim, inner, Paint()..color = _shade(stone, -0.30))
+      ..drawCircle(water, inner, Paint()..color = const Color(0xFF57BEDA))
       ..drawCircle(
-        centre.translate(3, 5),
-        radius,
-        Paint()..color = const Color(0x33000000),
-      )
-      ..drawCircle(centre, radius, Paint()..color = _shade(colors.accent, 0.30))
-      ..drawCircle(
-        centre,
-        radius - 7,
-        Paint()..color = const Color(0xFF57BEDA),
-      )
-      ..drawCircle(
-        centre,
-        radius - 7,
+        water,
+        inner,
         Paint()
           ..color = const Color(0x40FFFFFF)
           ..style = PaintingStyle.stroke
@@ -906,44 +1296,165 @@ abstract final class ZoneProps {
       // The spout, and the rings it makes. Static, because the fountain is in
       // the picture — a moving one would need its own live component, and one
       // animated water feature in this world is enough.
-      ..drawCircle(centre, 8, Paint()..color = const Color(0xFFDFF6FF))
+      ..drawCircle(water, 8, Paint()..color = const Color(0xFFDFF6FF))
       ..drawCircle(
-        centre,
+        water,
         radius * 0.55,
         Paint()
           ..color = const Color(0x59DFF6FF)
           ..style = PaintingStyle.stroke
           ..strokeWidth = 1.8,
-      );
+      )
+      ..restore();
   }
 
-  static void _paintTree(
-    Canvas canvas,
-    double x,
-    double y,
-    double radius,
-    ZoneColors colors,
-  ) {
+  /// How tall a bench's seat is, in world units.
+  static const double benchSeatHeight = 8;
+
+  /// How tall a bench's backrest is, in world units.
+  static const double benchBackHeight = 18;
+
+  /// How deep a bench's backrest is, in world units.
+  static const double benchBackDepth = 5;
+
+  /// The backrest of the bench standing on [bench]: a strip along whichever
+  /// long edge is further from the fountain, so whoever sits there faces it.
+  ///
+  /// Inside the footprint, for the same reason as a seat row's [backrest]:
+  /// the taller part collides exactly where the flat bench always did.
+  static Rect benchBack(Rect bench) => bench.center.dy > WorldLayout.fountain.y
+      ? Rect.fromLTRB(
+          bench.left,
+          bench.bottom - benchBackDepth,
+          bench.right,
+          bench.bottom,
+        )
+      : Rect.fromLTRB(
+          bench.left,
+          bench.top,
+          bench.right,
+          bench.top + benchBackDepth,
+        );
+
+  /// A bench: a slatted seat and a backrest, each standing on its own part
+  /// of the footprint.
+  ///
+  /// The northern piece is painted first, so the southern one's top covers
+  /// the foot of it the way the nearer half of a real bench would.
+  static void _paintBench(Canvas canvas, Rect at) {
+    final back = benchBack(at);
+    final seat = back.top == at.top
+        ? Rect.fromLTRB(at.left, back.bottom, at.right, at.bottom)
+        : Rect.fromLTRB(at.left, at.top, at.right, back.top);
+
+    // One shadow for both pieces, so where they overlap is darkened once.
+    canvas.drawPath(
+      Path()
+        ..addPolygon(
+          DioramaArt.boxShadow(seat, height: benchSeatHeight),
+          true,
+        )
+        ..addPolygon(DioramaArt.boxShadow(back, height: benchBackHeight), true),
+      Paint()..color = DioramaArt.shadowColor,
+    );
+
+    void paintBack() => DioramaArt.paintBox(
+      canvas,
+      back,
+      height: benchBackHeight,
+      color: const Color(0xFF9C6B3C),
+      corner: const Radius.circular(2),
+      shadow: false,
+    );
+    void paintSeat() {
+      DioramaArt.paintBox(
+        canvas,
+        seat,
+        height: benchSeatHeight,
+        color: const Color(0xFFB58351),
+        corner: const Radius.circular(3),
+        shadow: false,
+      );
+      // Two gaps between the slats, along the bench.
+      final top = DioramaArt.topFace(seat, height: benchSeatHeight);
+      final gap = Paint()
+        ..color = const Color(0x40241505)
+        ..strokeWidth = 1.2;
+      for (final t in const [1 / 3, 2 / 3]) {
+        final y = top.top + top.height * t;
+        canvas.drawLine(
+          Offset(top.left + 2, y),
+          Offset(top.right - 2, y),
+          gap,
+        );
+      }
+    }
+
+    if (back.top == at.top) {
+      paintBack();
+      paintSeat();
+    } else {
+      paintSeat();
+      paintBack();
+    }
+  }
+
+  /// How tall a tree's trunk stands before the leaves begin, in world units.
+  static const double treeCrownBase = 20;
+
+  /// How tall a tree stands to the top of its leaves, in world units.
+  static const double treeCrownTop = 32;
+
+  /// How wide a tree's canopy is for its trunk [radius].
+  static double treeCanopy(double radius) => radius * 2.6;
+
+  /// A tree's trunk standing on its footprint, and the shadow of the canopy
+  /// it holds up.
+  ///
+  /// The canopy's shadow is cast from up there, so it lies off to the
+  /// south-east of the trunk with a gap, which is what says "overhead".
+  static void _paintTrunk(Canvas canvas, double x, double y, double radius) {
     final at = Offset(x, y);
-    final canopy = radius * 2.6;
+    DioramaArt.paintCylinderShadow(
+      canvas,
+      at,
+      treeCanopy(radius) * 0.9,
+      base: treeCrownBase,
+      height: treeCrownTop - treeCrownBase,
+    );
+    DioramaArt.paintCylinder(
+      canvas,
+      at,
+      radius,
+      height: treeCrownBase,
+      color: const Color(0xFF7A5228),
+    );
+  }
+
+  /// A tree's canopy, held up on its trunk.
+  ///
+  /// Three blobs at three heights, from the dark underside at
+  /// [treeCrownBase] to the lit crown at [treeCrownTop], which is what gives
+  /// it volume rather than a lit side painted on a disc.
+  static void _paintCanopy(Canvas canvas, double x, double y, double radius) {
+    final at = Offset(x, y);
+    final canopy = treeCanopy(radius);
+    final low = DioramaArt.cylinderTop(at, height: treeCrownBase);
+    final mid = DioramaArt.cylinderTop(
+      at,
+      height: (treeCrownBase + treeCrownTop) / 2,
+    );
+    final high = DioramaArt.cylinderTop(at, height: treeCrownTop);
     canvas
-      // The canopy shadow, offset the way every other shadow in the world is.
+      // Three overlapping blobs of leaf, darkest and lowest first.
+      ..drawCircle(low, canopy, Paint()..color = const Color(0xFF3C7A34))
       ..drawCircle(
-        at.translate(7, 11),
-        canopy,
-        Paint()..color = const Color(0x2E000000),
-      )
-      ..drawCircle(at, radius, Paint()..color = const Color(0xFF7A5228))
-      // Three overlapping blobs of leaf, darkest first, so the canopy has a
-      // lit side without needing a gradient.
-      ..drawCircle(at, canopy, Paint()..color = const Color(0xFF3C7A34))
-      ..drawCircle(
-        at.translate(-canopy * 0.22, -canopy * 0.24),
+        mid.translate(-canopy * 0.22, -canopy * 0.24),
         canopy * 0.74,
         Paint()..color = const Color(0xFF4E9440),
       )
       ..drawCircle(
-        at.translate(-canopy * 0.34, -canopy * 0.36),
+        high.translate(-canopy * 0.34, -canopy * 0.36),
         canopy * 0.42,
         Paint()..color = const Color(0xFF67AE52),
       );
@@ -970,13 +1481,87 @@ abstract final class ZoneProps {
       ),
       surround,
     );
-    final solid = Paint()..color = accent;
+
+    // The pool's north wall, in shade. The water sits [poolDepth] below the
+    // deck, so inside the north rim a strip of wall shows, facing south and
+    // away from the light — the one cue that makes the pool a hole rather
+    // than a blue rug. Static, so it lives here and not in the live water;
+    // it is drawn over the water (this picture is above it) but translucent,
+    // and clipped to the water's own rounded shape so it follows the rim.
+    final pool = rect(WorldLayout.pool);
+    canvas
+      ..save()
+      ..clipRRect(RRect.fromRectAndRadius(pool, poolRimRadius))
+      ..drawRect(
+        poolInnerWall(pool),
+        Paint()..color = _shade(accent, -0.30).withValues(alpha: 0.42),
+      )
+      ..restore();
+
     for (final lounger in WorldLayout.loungers) {
-      canvas.drawRRect(
-        RRect.fromRectAndRadius(rect(lounger.rect), corner),
-        solid,
-      );
+      _paintLounger(canvas, rect(lounger.rect), accent);
     }
+  }
+
+  /// How far the water sits below the deck, in world units.
+  static const double poolDepth = 8;
+
+  /// How round the pool's rim is: a copy of `WaterComponent.shapeRadius`.
+  ///
+  /// Copied rather than imported, because importing the water component
+  /// would pull Flame into the static-art files; a test keeps the copy
+  /// honest.
+  static const Radius poolRimRadius = Radius.circular(26);
+
+  /// The strip of wall that shows inside the north rim of [pool].
+  static Rect poolInnerWall(Rect pool) => Rect.fromLTRB(
+    pool.left,
+    pool.top,
+    pool.right,
+    pool.top + poolDepth * DioramaArt.lift,
+  );
+
+  /// How tall a lounger's frame is, in world units.
+  static const double loungerHeight = 5;
+
+  /// How thick a lounger's cushion is, on top of the frame, in world units.
+  static const double cushionHeight = 3;
+
+  /// How tall a lounger's backrest stands over its frame, in world units.
+  static const double loungerBackHeight = 13;
+
+  /// A lounger: a white frame, a cushion on it, and a backrest at the north
+  /// end, so whoever lies on it faces south, at the pool.
+  ///
+  /// The cushion and backrest stand on the frame (their `base` is its
+  /// height) and inside its footprint, so the lounger collides exactly where
+  /// the flat one did.
+  static void _paintLounger(Canvas canvas, Rect at, Color accent) {
+    DioramaArt.paintBox(
+      canvas,
+      at,
+      height: loungerHeight,
+      color: const Color(0xFFF4F1EA),
+      corner: corner,
+    );
+    final cushion = _shade(accent, 0.30);
+    DioramaArt.paintBox(
+      canvas,
+      Rect.fromLTRB(at.left + 3, at.top + 9, at.right - 3, at.bottom - 3),
+      base: loungerHeight,
+      height: cushionHeight,
+      color: cushion,
+      corner: const Radius.circular(3),
+      shadow: false,
+    );
+    DioramaArt.paintBox(
+      canvas,
+      Rect.fromLTRB(at.left + 3, at.top + 2, at.right - 3, at.top + 9),
+      base: loungerHeight,
+      height: loungerBackHeight,
+      color: cushion,
+      corner: const Radius.circular(3),
+    );
   }
 
   // ---- Sponsor row (east arm) ---------------------------------------------
@@ -986,17 +1571,48 @@ abstract final class ZoneProps {
   /// The only part of the world that comes from config. It is still static
   /// art: config is read before the game loads, so a booth is exactly as
   /// fixed as the stage is.
+  ///
+  /// Since Phase 16 a booth is three pieces inside the same footprint: a low
+  /// floor, a back wall standing across its north half with the sign on its
+  /// face, and a counter along its south edge. **The sign has not moved.**
+  /// The wall is built backwards from the band — see [boothWall] — so the
+  /// brand band and the sponsor's name sit exactly where they always did,
+  /// and only now they are painted on something standing up.
   static void paintBooths(Canvas canvas, List<Sponsor> sponsors) {
     for (final sponsor in sponsors) {
       final footprint = rect(sponsor.footprint);
+      final wall = _upright(boothWall(footprint));
+      final counter = boothCounter(footprint);
+
+      DioramaArt.paintBox(
+        canvas,
+        footprint,
+        height: boothFloorHeight,
+        color: _shade(sponsor.color, -0.28),
+        corner: corner,
+      );
+      DioramaArt.paintBoxShadow(
+        canvas,
+        wall.footprint,
+        height: wall.height,
+      );
+      // The wall up to the booth's north edge. The rest of it is overhead —
+      // see [boothOverhead] — and the two clips are exact complements, hard
+      // edged, so the halves meet on a pixel line with no seam and no
+      // doubled hairline.
       canvas
+        ..save()
+        ..clipRect(
+          boothOverhead(footprint),
+          clipOp: ClipOp.difference,
+          doAntiAlias: false,
+        );
+      _paintBoothWall(canvas, footprint, sponsor.color);
+      canvas
+        ..restore()
         ..drawRRect(
-          RRect.fromRectAndRadius(footprint, corner),
-          Paint()..color = _shade(sponsor.color, -0.28),
-        )
-        // A band of the brand colour across the front of the booth: the one
-        // part of a booth a walking player actually reads.
-        ..drawRRect(
+          // A band of the brand colour across the face of the wall: the one
+          // part of a booth a walking player actually reads.
           RRect.fromRectAndRadius(
             Rect.fromLTRB(
               footprint.left + 8,
@@ -1013,25 +1629,169 @@ abstract final class ZoneProps {
         label,
         Offset(footprint.center.dx - label.width / 2, footprint.top + 13),
       );
+
+      // The counter: a white top with the brand colour down its front, the
+      // trim a booth wears at the height a visitor's eye actually is.
+      DioramaArt.paintBox(
+        canvas,
+        counter,
+        height: boothCounterHeight,
+        color: const Color(0xFFF7F4EE),
+        front: sponsor.color,
+        corner: const Radius.circular(3),
+      );
     }
   }
 
+  /// Draws the booths' overhead: the top of each back wall, over the beans.
+  static void paintBoothsOverhead(Canvas canvas, List<Sponsor> sponsors) {
+    for (final sponsor in sponsors) {
+      final footprint = rect(sponsor.footprint);
+      canvas
+        ..save()
+        ..clipRect(boothOverhead(footprint), doAntiAlias: false);
+      _paintBoothWall(canvas, footprint, sponsor.color);
+      canvas.restore();
+    }
+  }
+
+  /// The part of the booth on [footprint] that is drawn over the beans:
+  /// everything north of the booth's own north edge, which is the top of its
+  /// back wall.
+  ///
+  /// **Only that much.** The collider is a point at a bean's feet, so a bean
+  /// can stand right at the counter, and its head then reaches up across the
+  /// wall's face. A whole wall over the beans would cut the head off the one
+  /// visitor actually at the booth. North of the footprint is only ever
+  /// somebody *behind* the booth, and the top of the wall is what should
+  /// hide them.
+  static Rect boothOverhead(Rect footprint) => Rect.fromLTRB(
+    footprint.left - 4,
+    footprint.top - footprint.height,
+    footprint.right + 4,
+    footprint.top,
+  );
+
+  /// A booth's back wall in its darker brand colour, without its shadow.
+  static void _paintBoothWall(Canvas canvas, Rect footprint, Color brand) {
+    final wall = _upright(boothWall(footprint));
+    DioramaArt.paintBox(
+      canvas,
+      wall.footprint,
+      height: wall.height,
+      color: _shade(brand, -0.40),
+      front: _shade(brand, -0.20),
+      corner: corner,
+      shadow: false,
+    );
+  }
+
+  /// How far a booth's floor stands off the ground, in world units.
+  static const double boothFloorHeight = 3;
+
+  /// How tall a booth's counter is, in world units.
+  static const double boothCounterHeight = 12;
+
+  /// How deep a booth's counter is, north to south, in world units.
+  static const double boothCounterDepth = 16;
+
+  /// The face of the back wall of the booth on [footprint]: the sign the
+  /// brand band and the name are painted on.
+  ///
+  /// Its bottom edge is the bottom of the band, so the band is the lower
+  /// part of the wall and the wall stands up out of the footprint above it.
+  /// Its top edge rises past the footprint's north edge — a wall's face
+  /// shows *above* where it stands — which is art, not collision: the booth
+  /// still blocks exactly its footprint.
+  static Rect boothWall(Rect footprint) => Rect.fromLTRB(
+    footprint.left,
+    footprint.top - 18,
+    footprint.right,
+    footprint.top + 34,
+  );
+
+  /// The counter along the south edge of the booth on [footprint].
+  ///
+  /// Shallow and low on purpose: its lifted top must clear the bottom of the
+  /// sign, or the counter would be painted across the sponsor's name.
+  static Rect boothCounter(Rect footprint) => Rect.fromLTRB(
+    footprint.left + 10,
+    footprint.bottom - 4 - boothCounterDepth,
+    footprint.right - 10,
+    footprint.bottom - 4,
+  );
+
   // ---- Atrium (centre) ----------------------------------------------------
 
+  /// How tall the credit pillar is, in world units.
+  ///
+  /// The tallest thing in the atrium on purpose: it is the landmark every
+  /// spawn faces, and the one prop you should be able to find from across
+  /// the room.
+  static const double pillarHeight = 84;
+
+  /// How far up the pillar its lit band starts, in world units.
+  static const double pillarBandBase = 58;
+
+  /// How tall the pillar's lit band is, in world units.
+  static const double pillarBandHeight = 6;
+
+  /// The colour of the pillar's lit band: the sign yellow, unshaded on every
+  /// face because it is a light, not a surface the sun falls on.
+  static const Color pillarBand = Color(0xFFFFD23F);
+
   /// Draws the credit pillar in the middle of the atrium.
+  ///
+  /// Three stacked cylinders — shaft, lit band, shaft — rather than one with
+  /// a stripe painted on, because the band stands half a unit proud of the
+  /// shaft and the stack gets that for free. Painted bottom to top, so each
+  /// piece covers the top face of the one under it, which is the painter's
+  /// algorithm doing the only depth sort this prop needs. One shadow for the
+  /// whole height.
   static void paintPillar(Canvas canvas) {
     const centre = Offset(WorldLayout.pillarX, WorldLayout.pillarY);
-    canvas
-      ..drawCircle(
-        centre,
-        WorldLayout.pillarRadius,
-        Paint()..color = WorldPalette.of(WorldZone.atrium).accent,
-      )
-      ..drawCircle(
-        centre,
-        WorldLayout.pillarRadius - 9,
-        Paint()..color = _boothScreen,
-      );
+    const radius = WorldLayout.pillarRadius;
+    final stone = WorldPalette.of(WorldZone.atrium).accent;
+    const above = pillarBandBase + pillarBandHeight;
+
+    DioramaArt.paintCylinderShadow(
+      canvas,
+      centre,
+      radius,
+      height: pillarHeight,
+    );
+    DioramaArt.paintCylinder(
+      canvas,
+      centre,
+      radius,
+      height: pillarBandBase,
+      color: stone,
+      shadow: false,
+    );
+    DioramaArt.paintCylinder(
+      canvas,
+      centre,
+      radius + 1.5,
+      base: pillarBandBase,
+      height: pillarBandHeight,
+      color: pillarBand,
+      front: pillarBand,
+      shadow: false,
+    );
+    DioramaArt.paintCylinder(
+      canvas,
+      centre,
+      radius,
+      base: above,
+      height: pillarHeight - above,
+      color: stone,
+      shadow: false,
+    );
+    canvas.drawCircle(
+      DioramaArt.cylinderTop(centre, height: pillarHeight),
+      radius - 9,
+      Paint()..color = _boothScreen,
+    );
   }
 
   static const Color _boothScreen = Color(0xFF0D1520);
@@ -1058,18 +1818,6 @@ abstract final class ZoneProps {
   /// Converts a world rectangle into a drawable one.
   static Rect rect(WorldRect r) =>
       Rect.fromLTRB(r.left, r.top, r.right, r.bottom);
-
-  /// The soft contact shadow every solid prop casts.
-  ///
-  /// One offset blob, not a blur: a `MaskFilter` on forty props is a real
-  /// per-prop cost at record time and a bigger one in the raster, and at this
-  /// camera angle nobody can tell the difference.
-  static void _shadow(Canvas canvas, Rect at) {
-    canvas.drawRRect(
-      RRect.fromRectAndRadius(at.translate(3, 4), corner),
-      Paint()..color = const Color(0x2E000000),
-    );
-  }
 
   /// Returns [base] moved towards white (positive) or black (negative).
   static Color _shade(Color base, double amount) => Color.lerp(
