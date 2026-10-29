@@ -46,10 +46,10 @@ reach the relay directly.
 sudo apt-get update && sudo apt-get install -y docker.io docker-compose-v2 git
 sudo systemctl enable --now docker          # survives a reboot
 
-sudo mkdir -p /opt/virtual-conference
-sudo chown "$USER":"$USER" /opt/virtual-conference
-git clone <repo-url> /opt/virtual-conference
-cd /opt/virtual-conference/deploy
+sudo mkdir -p /opt/virtual-meetup
+sudo chown "$USER":"$USER" /opt/virtual-meetup
+git clone <repo-url> /opt/virtual-meetup
+cd /opt/virtual-meetup/deploy
 
 mkdir -p data web
 cp .env.example .env
@@ -121,7 +121,7 @@ fvm flutter build web --release \
   --dart-define=SERVER_URL=wss://your-host/ws
 
 grep -c "wss://your-host/ws" build/web/main.dart.js    # MUST print 1 or more
-rsync -az --delete build/web/ user@host:/opt/virtual-conference/deploy/web/
+rsync -az --delete build/web/ user@host:/opt/virtual-meetup/deploy/web/
 ```
 
 That grep is not paranoia. Forgetting the flag still builds, and ships a bundle
@@ -138,8 +138,7 @@ to main must never restart the server underneath a room full of people.
 
 Repository secrets it needs: `DEPLOY_HOST`, `DEPLOY_USER`, `DEPLOY_SSH_KEY`.
 Repository variable: `SITE_DOMAIN`, the one hostname baked into the bundle.
-Repository variable: `SITE_DOMAIN`. The admin token is **not** among them — it
-lives only on the VM.
+The admin token is **not** among them — it lives only on the VM.
 
 ---
 
@@ -159,7 +158,7 @@ rebuild** — including the two Phase 7 emergency levers, `TICK_HZ=10` and
 Back up before every deploy:
 
 ```bash
-tar czf ~/vc-backup-$(date +%F-%H%M).tgz -C /opt/virtual-conference/deploy data
+tar czf ~/vc-backup-$(date +%F-%H%M).tgz -C /opt/virtual-meetup/deploy data
 ```
 
 ## Moderation
