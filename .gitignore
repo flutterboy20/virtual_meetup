@@ -12,6 +12,10 @@ CLAUDE.md
 *.session.md
 /scratch/
 NOTES.md
+# Local Claude Code settings (permissions, launch configs) are per-machine.
+/.claude/
+# DevTools writes this on first run; it is per-developer state.
+devtools_options.yaml
 
 # ─────────────────────────────────────────────────────────────
 #  fvm — the pin (.fvmrc) IS committed, the downloaded SDK is not.
