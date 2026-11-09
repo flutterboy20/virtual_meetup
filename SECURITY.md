@@ -44,10 +44,12 @@ Out of scope, because they are **known, documented, deliberate** trade-offs:
 - **The moderation route being discoverable.** `/#og-route` is compiled into
   the shipped bundle and can be read out of the JavaScript. Opening it grants
   nothing; every action behind it is refused until a valid token arrives.
-- **`Origin` pinning not stopping non-browser clients.** A request with no
-  `Origin` header passes, which is what keeps the load tester working. Origin
-  pinning stops a hostile web page using its visitors' browsers; the socket
-  cap is what limits everything else.
+- **`Origin` pinning not stopping non-browser clients.** A server pinned to
+  real origins refuses sockets with no `Origin` header (`REQUIRE_ORIGIN`), so
+  the repo's own load tester cannot be pointed at a live event unchanged. Any
+  script can still set the header itself. Origin pinning stops a hostile web
+  page using its visitors' browsers and slows down the laziest bot; the
+  socket and player caps are what limit everything else.
 - Reports from automated scanners with no demonstrated impact.
 
 ## Deploying this safely

@@ -40,6 +40,7 @@ Handler buildWebSocketHandler(
   MapRelays hub, {
   LogSink log = logLine,
   Set<String>? allowedOrigins = const {},
+  bool requireOrigin = false,
 }) {
   final handlers = {
     for (final map in MapId.values)
@@ -47,6 +48,7 @@ Handler buildWebSocketHandler(
         hub.relayFor(map),
         log: log,
         allowedOrigins: allowedOrigins,
+        requireOrigin: requireOrigin,
       ),
   };
   return (Request request) {
@@ -59,6 +61,7 @@ Handler _relayHandler(
   Relay relay, {
   required LogSink log,
   Set<String>? allowedOrigins = const {},
+  bool requireOrigin = false,
 }) {
   return webSocketUpgrade(
     (channel) {
@@ -81,6 +84,7 @@ Handler _relayHandler(
     // no `Origin` header at all, `tool/loadtest/` included). `null` is any
     // origin, which now only happens when somebody asks for it by name.
     allowedOrigins: allowedOrigins,
+    requireOrigin: requireOrigin,
     // Enforced by `dart:io` before the payload is buffered, which is the one
     // thing the guard in `RelaySession.handleData` structurally cannot do.
     // The two numbers are the same on purpose: a frame this rejects is a
@@ -103,6 +107,7 @@ Handler buildAdminWebSocketHandler(
   AdminHub hub, {
   LogSink log = logLine,
   Set<String>? allowedOrigins = const {},
+  bool requireOrigin = false,
 }) {
   return webSocketUpgrade(
     (channel) {
@@ -121,6 +126,7 @@ Handler buildAdminWebSocketHandler(
     // full — but there is no reason for it to accept a browser origin the
     // player route would refuse.
     allowedOrigins: allowedOrigins,
+    requireOrigin: requireOrigin,
     // Sixteen times the player ceiling, because an admin frame carries a
     // whole config document. The same number `AdminSession.handleData`
     // checks against, for the same reason the player pair match.

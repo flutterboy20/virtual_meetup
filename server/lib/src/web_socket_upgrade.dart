@@ -42,13 +42,14 @@ import 'package:web_socket_channel/web_socket_channel.dart';
 /// of a source redistribution.
 ///
 /// [maxFrameBytes] is the ceiling. [allowedOrigins] `null` means any origin,
-/// an empty set means no browser origin at all, and a request carrying no
-/// `Origin` header passes either way — see `resolveAllowedOrigins` for why
-/// that last part is deliberate.
+/// an empty set means no browser origin at all. A request carrying no
+/// `Origin` header passes either way unless [requireOrigin] is set — see
+/// `resolveRequireOrigin` for when it is, and why it is only a speed bump.
 Handler webSocketUpgrade(
   void Function(WebSocketChannel channel) onConnection, {
   required int maxFrameBytes,
   Set<String>? allowedOrigins = const {},
+  bool requireOrigin = false,
   Duration? pingInterval,
 }) {
   if (maxFrameBytes < 1) {
@@ -101,6 +102,11 @@ Handler webSocketUpgrade(
     // opening sockets here through its visitors' browsers. It stops nothing
     // that sends no `Origin` at all, which is the whole of its honest value.
     final origin = request.headers['Origin'];
+    // Only a script leaves `Origin` out. Refused here, before the hijack, so
+    // it costs no socket and no connection slot.
+    if (origin == null && requireOrigin) {
+      return _forbidden('missing Origin header.');
+    }
     if (origin != null &&
         allowedOrigins != null &&
         !allowedOrigins.contains(origin.toLowerCase())) {

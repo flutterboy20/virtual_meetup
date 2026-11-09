@@ -312,6 +312,45 @@ Set<String>? resolveAllowedOrigins(Map<String, String> environment) {
   return origins;
 }
 
+/// The environment variable that decides whether a socket with no `Origin`
+/// header is refused.
+const String requireOriginEnvVar = 'REQUIRE_ORIGIN';
+
+/// Resolves whether a WebSocket upgrade that carries no `Origin` is refused,
+/// given the [allowedOrigins] already resolved from the same [environment].
+///
+/// - **`true` / `false`** (any case) → exactly that.
+/// - **Unset or blank → `true` when [allowedOrigins] names real origins**,
+///   `false` otherwise. A server pinned to its own site is a production
+///   server, and every real visitor of a production server is a browser,
+///   which always sends `Origin`. Local development (`*`) and the unset case
+///   keep accepting `curl` and `tool/loadtest/` with no change.
+///
+/// **This is a speed bump, not access control.** `Origin` is one header any
+/// script can set. What it stops is the cheapest attack there is on a public
+/// repo shown at a conference: somebody pointing the repo's own load tester
+/// at the live URL and filling every seat. They now have to read the code
+/// and change it first, and the moderator has that long to notice.
+///
+/// Anything other than `true` or `false` throws, like every other variable
+/// here: a typo must not quietly pick a side.
+bool resolveRequireOrigin(
+  Map<String, String> environment, {
+  required Set<String>? allowedOrigins,
+}) {
+  final raw = environment[requireOriginEnvVar]?.trim().toLowerCase();
+  if (raw == null || raw.isEmpty) {
+    return allowedOrigins != null && allowedOrigins.isNotEmpty;
+  }
+  return switch (raw) {
+    'true' => true,
+    'false' => false,
+    _ => throw FormatException(
+      '$requireOriginEnvVar must be true or false, got "$raw"',
+    ),
+  };
+}
+
 /// The environment variable that overrides where bans are persisted.
 const String banFileEnvVar = 'BAN_FILE';
 

@@ -58,12 +58,21 @@ Handler buildHandler({
   MapRelays? relays,
   AdminHub? admin,
   Set<String>? allowedOrigins = const {},
+  bool requireOrigin = false,
 }) {
   final hub = relays ?? MapRelays();
-  final webSocket = buildWebSocketHandler(hub, allowedOrigins: allowedOrigins);
+  final webSocket = buildWebSocketHandler(
+    hub,
+    allowedOrigins: allowedOrigins,
+    requireOrigin: requireOrigin,
+  );
   final adminSocket = admin == null
       ? null
-      : buildAdminWebSocketHandler(admin, allowedOrigins: allowedOrigins);
+      : buildAdminWebSocketHandler(
+          admin,
+          allowedOrigins: allowedOrigins,
+          requireOrigin: requireOrigin,
+        );
 
   return (Request request) {
     if (request.url.path == webSocketPath) {

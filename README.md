@@ -162,7 +162,9 @@ cd tool/loadtest
 fvm dart run bin/loadtest.dart --bots 200 --seconds 60
 ```
 
-Then join with a real browser or phone and walk among them. Watch the server's
+Then join with a real browser or phone and walk among them. Against a deployed
+server pinned to its own origin, set `REQUIRE_ORIGIN=false` on it for the length of
+the run: by default it refuses the bots, which send no `Origin`. Watch the server's
 metrics line while it runs — `perSnapshot` far below `players` is interest
 management doing its job.
 
@@ -222,7 +224,8 @@ fvm exec dart run melos run ci --no-select   # format + analyze + test, everythi
 | `TICK_HZ` | server | `15` | How often each client is sent a snapshot. The single biggest lever on server CPU and bandwidth — both scale with it linearly. Lowering it means raising the client's interpolation delay to match. |
 | `MAX_SOCKETS` | server | `800` | The most sockets held open at once, checked at the HTTP upgrade — past it the server answers `503` and allocates no socket. This is the cap a flood meets, and it counts **sockets, not players**: a socket that connects and never joins is invisible to the player count. Far above any real crowd; it should never fire on the day. |
 | `MAX_PLAYERS` | server | `400` | The most players seated at once. A join past it is refused with `worldFull` and the client shows a screen that says so and lets itself back in when a seat frees. Costs a socket on purpose, so the person can be told why. |
-| `ALLOWED_ORIGINS` | server | *(none)* | Comma-separated origins a **browser** may connect from, e.g. `https://meet.example.com`. Drives both WebSocket handshakes and the `Access-Control-Allow-Origin` on `/config` and `/metrics`. **Unset means no browser may connect** — set it to `*` for local development and the LAN demo, or to your exact HTTPS origin in production. `*` mixed into a list is refused rather than guessed at. **Not access control:** a browser always sends `Origin`, so this stops a hostile web page using its visitors' browsers — but `curl` and the load tester send no `Origin` at all and pass straight through. `MAX_SOCKETS` is what limits them. |
+| `ALLOWED_ORIGINS` | server | *(none)* | Comma-separated origins a **browser** may connect from, e.g. `https://meet.example.com`. Drives both WebSocket handshakes and the `Access-Control-Allow-Origin` on `/config` and `/metrics`. **Unset means no browser may connect** — set it to `*` for local development and the LAN demo, or to your exact HTTPS origin in production. `*` mixed into a list is refused rather than guessed at. **Not access control:** a browser always sends `Origin`, so this stops a hostile web page using its visitors' browsers. `curl` and the load tester send no `Origin` at all; see `REQUIRE_ORIGIN`. `MAX_SOCKETS` is what limits them. |
+| `REQUIRE_ORIGIN` | server | *(on when `ALLOWED_ORIGINS` names real origins)* | `true` refuses any WebSocket with no `Origin` header with a `403`, before a socket is allocated. Every browser sends one; scripts and the load tester do not. On by default in production, so somebody in the audience cannot point this repo's own load tester at the live URL and fill every seat. A speed bump, not a wall: a script can set the header. Set `false` to load-test a pinned server; `*` and unset leave it off. |
 | `METRICS_CSV` | server | *(off)* | Append one row of load metrics per reporting window to this file, for charting a run afterwards. Off by default: a server that writes files nobody asked for is a server that fills a disk during a six-hour event. |
 | `PERF_HUD` | client | `false` | Compiles in an on-screen `fps / p95 / jank% / worst` readout, for profiling on a real phone where there is no DevTools. `--dart-define=PERF_HUD=true`. Tree-shaken out of the shipping bundle. |
 

@@ -22,6 +22,10 @@ Future<void> main() async {
   final maxSockets = resolveMaxSockets(Platform.environment);
   final maxPlayers = resolveMaxPlayers(Platform.environment);
   final allowedOrigins = resolveAllowedOrigins(Platform.environment);
+  final requireOrigin = resolveRequireOrigin(
+    Platform.environment,
+    allowedOrigins: allowedOrigins,
+  );
 
   // Opened before the relay starts ticking, so the very first reporting
   // window has somewhere to go.
@@ -57,7 +61,12 @@ Future<void> main() async {
   final admin = AdminHub(relays: hub, token: adminToken);
 
   await shelf_io.serve(
-    buildHandler(relays: hub, admin: admin, allowedOrigins: allowedOrigins),
+    buildHandler(
+      relays: hub,
+      admin: admin,
+      allowedOrigins: allowedOrigins,
+      requireOrigin: requireOrigin,
+    ),
     InternetAddress.anyIPv4,
     port,
   );
@@ -102,6 +111,12 @@ Future<void> main() async {
             '$anyOriginWildcard for local development',
       final origins => '  origins:   ${origins.join(', ')}',
     },
+  );
+  logLine(
+    requireOrigin
+        ? '  no-Origin: refused — scripts and the load tester cannot connect '
+              '($requireOriginEnvVar=false to allow them)'
+        : '  no-Origin: allowed — curl and the load tester connect',
   );
   logLine('  config:    http://localhost:$port/$configPath ($configFilePath)');
   logLine('  health:    http://localhost:$port/$healthPath');
