@@ -51,6 +51,22 @@
 		header {
 			Referrer-Policy "no-referrer"
 			X-Content-Type-Options "nosniff"
+			# Nobody may put the world — or the moderation screen, which lives
+			# in the same bundle at /#og-route — inside their own page. The
+			# CSP line is the modern form and X-Frame-Options covers browsers
+			# that predate it. Deliberately only frame-ancestors: a full CSP
+			# for a Flutter bundle (CanvasKit, wasm, service worker) is a
+			# project of its own, and a wrong one is a blank screen on the day.
+			Content-Security-Policy "frame-ancestors 'none'"
+			X-Frame-Options "DENY"
+			# Switch off the powerful browser features this app never uses.
+			# web-share is left alone on purpose: the Share button needs it.
+			Permissions-Policy "camera=(), microphone=(), geolocation=(), payment=(), usb=(), bluetooth=(), serial=(), hid=()"
+			# This site is HTTPS-only already (a .dev domain is on the
+			# browsers' preload list); this makes it true for any other name
+			# in SITE_DOMAIN too. No includeSubDomains: other names under the
+			# same domain are not ours to decide for.
+			Strict-Transport-Security "max-age=31536000"
 			# Do not advertise the server software.
 			-Server
 		}

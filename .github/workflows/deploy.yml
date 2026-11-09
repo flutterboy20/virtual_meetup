@@ -180,6 +180,31 @@ jobs:
             "${DEPLOY_USER}@${DEPLOY_HOST}" \
             'cd /opt/virtual-meetup/deploy && docker compose up -d --build relay'
 
+      # The Caddyfile is a single-file bind mount, and rsync replaces a file
+      # by renaming a new one over it — so a running Caddy keeps reading the
+      # OLD file forever, and a changed header or route silently never ships.
+      # Compare what Caddy is actually reading with what was just uploaded,
+      # and only when they differ: validate the new one in a throwaway
+      # container (a bad file fails this step while the old Caddy keeps
+      # serving), then restart Caddy so it mounts the new file. The certificate
+      # lives in the caddy_data volume, so a restart does not reissue it.
+      - name: Reload Caddy if the Caddyfile changed
+        env:
+          DEPLOY_HOST: ${{ secrets.DEPLOY_HOST }}
+          DEPLOY_USER: ${{ secrets.DEPLOY_USER }}
+        run: |
+          ssh -i ~/.ssh/id_deploy -o StrictHostKeyChecking=yes \
+            "${DEPLOY_USER}@${DEPLOY_HOST}" \
+            'set -e
+             cd /opt/virtual-meetup/deploy
+             if docker compose exec -T caddy cat /etc/caddy/Caddyfile | cmp -s - Caddyfile; then
+               echo "Caddyfile unchanged"
+             else
+               docker compose run --rm --no-deps caddy caddy validate --config /etc/caddy/Caddyfile --adapter caddyfile
+               docker compose restart caddy
+               echo "Caddy restarted on the new Caddyfile"
+             fi'
+
       - name: Verify the deployment answers
         env:
           SITE_DOMAIN: ${{ vars.SITE_DOMAIN }}
