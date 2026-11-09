@@ -26,12 +26,10 @@ abstract final class Credits {
 
   /// Where somebody a moderator removed is told to write.
   ///
-  /// **A placeholder.** Deliberately not the maker addresses below: an appeal
-  /// against a moderator decision is event business, and it wants an inbox
-  /// the event team can all read rather than one person's personal mail. The
-  /// real address goes here before the doors open — tracked in
-  /// `.planning/open-questions.md`.
-  static const String supportEmail = 'support@example.com';
+  /// Deliberately not the maker addresses below: an appeal against a
+  /// moderator decision is event business, and it wants the project inbox
+  /// (the same one the about page lists) rather than one person's mail.
+  static const String supportEmail = 'hello@virtualmeetup.dev';
 
   /// Every way to reach the author, in the order they are shown.
   ///

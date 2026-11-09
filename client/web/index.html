@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html>
+<html lang="en">
 <head>
   <!--
     If you are serving your web app in a path other than the root, change the
@@ -19,15 +19,34 @@
   <meta charset="UTF-8">
   <meta content="IE=Edge" http-equiv="X-UA-Compatible">
   <meta name="description" content="A browser-based multiplayer walk-around world for conferences and meetups.">
+  <meta name="theme-color" content="#0553B1">
+
+  <!--
+    Link previews (WhatsApp, Slack, LinkedIn, X). Crawlers do not run
+    JavaScript, so these have to be in the HTML. og:image must be an absolute
+    URL; the card is the canonical domain's even when the bundle is served
+    from another hostname.
+  -->
+  <meta property="og:type" content="website">
+  <meta property="og:site_name" content="Virtual Meetup">
+  <meta property="og:title" content="Virtual Meetup">
+  <meta property="og:description" content="Pick a bean, walk around, say hi. A little multiplayer world that runs in your phone's browser.">
+  <meta property="og:url" content="https://virtualmeetup.dev/">
+  <meta property="og:image" content="https://virtualmeetup.dev/og-image.png">
+  <meta property="og:image:width" content="1200">
+  <meta property="og:image:height" content="630">
+  <meta property="og:image:alt" content="Two beans on a blue tile next to the words Virtual Meetup">
+  <meta name="twitter:card" content="summary_large_image">
 
   <!-- iOS meta tags & icons -->
   <meta name="mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black">
   <meta name="apple-mobile-web-app-title" content="Virtual Meetup">
-  <link rel="apple-touch-icon" href="icons/Icon-192.png">
+  <link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
 
-  <!-- Favicon -->
-  <link rel="icon" type="image/png" href="favicon.png"/>
+  <!-- Favicon: SVG where supported, PNG for the rest. -->
+  <link rel="icon" type="image/svg+xml" href="favicon.svg">
+  <link rel="icon" type="image/png" sizes="32x32" href="favicon.png">
 
   <title>Virtual Meetup</title>
   <link rel="manifest" href="manifest.json">
