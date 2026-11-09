@@ -7,12 +7,19 @@
   No JavaScript, no external fonts, no analytics, no request to any other
   host. `flutter build web` copies this file into build/web/, and Caddy's
   `try_files {path} /index.html` serves it because it exists.
+
+  It wears the front door's clothes — paper, ink, the badge blue and the
+  wayfinding yellow from `LanyardColors` in client/lib/core/theme.dart — so
+  stepping from the door to this page and back feels like one place. The
+  bundled Archivo is not loaded here: a font file is another request, and
+  this page promises to make as few as it can.
 -->
 <html lang="en">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="description" content="Virtual Meetup is an open-source, browser-based multiplayer world for conferences and meetups.">
+  <meta name="theme-color" content="#0553B1">
   <title>About · Virtual Meetup</title>
   <meta property="og:type" content="website">
   <meta property="og:site_name" content="Virtual Meetup">
@@ -25,75 +32,151 @@
   <link rel="icon" type="image/png" sizes="32x32" href="favicon.png">
   <style>
     :root {
-      color-scheme: dark;
-      --bg: #0b1a22;
-      --ink: #eaf6fb;
-      --muted: #9fb6c2;
-      --good: #7ed9b6;
-      --line: rgba(234, 246, 251, 0.09);
+      color-scheme: light;
+      --paper: #efebe2;
+      --badge: #ffffff;
+      --ink: #111418;
+      --muted: #5a616b;
+      --blue: #0553b1;
+      --signal: #ffd23f;
+      --line: rgba(17, 20, 24, 0.12);
     }
     * { box-sizing: border-box; }
     body {
       margin: 0;
-      background: var(--bg);
+      background: var(--paper);
       color: var(--ink);
       font: 16px/1.6 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
     }
     main {
       max-width: 640px;
       margin: 0 auto;
-      padding: 40px 16px 56px;
+      padding: 0 16px 56px;
+    }
+
+    /* The badge: a lanyard strap, a clip, a blue header and a white card. */
+    .strap {
+      width: 46px;
+      height: 44px;
+      margin: 0 auto;
+      background: var(--blue);
+    }
+    .clip {
+      width: 30px;
+      height: 16px;
+      margin: -8px auto 0;
+      position: relative;
+      border: 2px solid #7d838c;
+      border-radius: 6px;
+      background: #c9ccd1;
+    }
+    .badge {
+      margin-top: -4px;
+      overflow: hidden;
+      border-radius: 24px;
+      background: var(--badge);
+      box-shadow: 0 18px 40px rgba(17, 20, 24, 0.12);
+    }
+    .badge header {
+      padding: 22px 24px 20px;
+      background: var(--blue);
+      color: #fff;
+    }
+    .slot {
+      width: 54px;
+      height: 9px;
+      margin: 0 auto 18px;
+      border-radius: 9px;
+      background: rgba(255, 255, 255, 0.85);
     }
     .eyebrow {
-      margin: 0 0 8px;
-      color: var(--muted);
+      margin: 0;
       font-size: 12px;
       font-weight: 700;
       letter-spacing: 0.14em;
       text-transform: uppercase;
     }
+    .badge .eyebrow { color: rgba(255, 255, 255, 0.82); }
     h1 {
-      margin: 0 0 12px;
+      margin: 4px 0 0;
       font-size: clamp(32px, 9vw, 44px);
       line-height: 1.1;
       letter-spacing: -0.02em;
     }
-    h2 {
-      margin: 40px 0 8px;
-      font-size: 20px;
+    .badge-body { padding: 20px 24px 24px; }
+    .lead {
+      margin: 0 0 20px;
+      font-size: 18px;
     }
-    p, li { color: var(--muted); }
-    strong { color: var(--ink); }
-    a { color: var(--good); }
-    .lead { font-size: 18px; }
     .cta {
-      display: inline-block;
-      margin-top: 8px;
-      padding: 12px 22px;
-      border-radius: 999px;
-      background: #4fc3f7;
-      color: #0b1a22;
+      display: block;
+      padding: 14px 22px;
+      border-radius: 18px;
+      background: var(--blue);
+      color: #fff;
+      font-size: 18px;
       font-weight: 700;
+      text-align: center;
       text-decoration: none;
     }
-    figure { margin: 32px 0 0; }
-    figure img {
+
+    figure { margin: 0; }
+    .shots {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 12px;
+      margin-top: 32px;
+    }
+    .shots img {
       display: block;
       width: 100%;
-      max-width: 300px;
       height: auto;
-      margin: 0 auto;
       border: 1px solid var(--line);
-      border-radius: 24px;
+      border-radius: 18px;
+      background: var(--badge);
     }
     figcaption {
-      margin-top: 8px;
+      margin-top: 6px;
       color: var(--muted);
       font-size: 13px;
       text-align: center;
     }
-    ol { padding-left: 20px; }
-    li + li { margin-top: 8px; }
+
+    h2.eyebrow {
+      margin: 40px 0 12px;
+      color: var(--muted);
+    }
+    p, li { color: var(--ink); }
+    a { color: var(--blue); }
+
+    /* "How it works" as a run of hall signs: black plate, yellow arrow. */
+    ol {
+      margin: 0;
+      padding: 0;
+      list-style: none;
+    }
+    ol li {
+      padding: 14px 16px 14px 48px;
+      position: relative;
+      border-radius: 14px;
+      background: var(--ink);
+      color: #d9dde2;
+    }
+    ol li::before {
+      content: "\2192";
+      position: absolute;
+      left: 18px;
+      top: 12px;
+      color: var(--signal);
+      font-size: 20px;
+      font-weight: 700;
+    }
+    ol li + li { margin-top: 10px; }
+    ol strong { color: var(--signal); }
+    ul { padding-left: 20px; }
+    ul li + li { margin-top: 6px; }
+    .note { color: var(--muted); }
+
     footer {
       margin-top: 48px;
       padding-top: 16px;
@@ -105,41 +188,75 @@
 </head>
 <body>
   <main>
-    <p class="eyebrow">About</p>
-    <h1>Virtual Meetup</h1>
-    <p class="lead">
-      A browser-based, multiplayer walk-around world for any conference or
-      meetup. Open a link on your phone, pick a character, and roam one shared
-      map with everyone else in the room.
-    </p>
-    <a class="cta" href="/">Walk in</a>
+    <div class="strap" aria-hidden="true"></div>
+    <div class="clip" aria-hidden="true"></div>
+    <article class="badge">
+      <header>
+        <div class="slot" aria-hidden="true"></div>
+        <p class="eyebrow">About</p>
+        <h1>Virtual Meetup</h1>
+      </header>
+      <div class="badge-body">
+        <p class="lead">
+          A little world for people who show up. Open a link on your phone,
+          fill in a conference badge, and walk around one shared map with
+          everyone else at the event.
+        </p>
+        <a class="cta" href="/">Walk in &rarr;</a>
+      </div>
+    </article>
 
-    <figure>
-      <img src="about-front-door.webp" width="390" height="844"
-           alt="The Virtual Meetup front door on a phone: the title, a row of animated bean characters, a map picker and a Join button.">
-      <figcaption>The front door, on a phone.</figcaption>
-    </figure>
+    <div class="shots">
+      <figure>
+        <img src="about-front-door.webp" width="780" height="1688"
+             alt="The front door on a phone: a conference badge on a lanyard with a name written on it, a blue bean in a cap, eight colours and the hats, the Conference and Beach hall signs with their head counts, and the Enter button.">
+        <figcaption>The front door: your badge.</figcaption>
+      </figure>
+      <figure>
+        <img src="about-world.webp" width="780" height="1688"
+             alt="Inside the world on a phone, in the garden: your bean with its nametag on the paved walk, a fountain, a tree, other beans, the room card, the minimap, the joystick and the dock with menu, reactions and Share.">
+        <figcaption>Inside: the garden deck.</figcaption>
+      </figure>
+    </div>
 
-    <h2>How it works</h2>
+    <h2 class="eyebrow">How it works</h2>
     <ol>
-      <li><strong>Pick a name and a bean.</strong> No sign-up and no app to
-        install. It runs in the browser you already have.</li>
-      <li><strong>Walk around.</strong> Your phone sends its own position to a
-        small Dart relay server, which passes it on only to the people near
-        you. That is how a few hundred people share one map.</li>
-      <li><strong>Make it your event's.</strong> The event name, the front-door
-        text and the sponsor booths are configuration, not code, so any meetup
-        can reuse it.</li>
+      <li><strong>Fill in your badge.</strong> Write your name, pick one of
+        eight colours and a hat. No sign-up and no app to install: it runs in
+        the browser you already have, and remembers your badge next time.</li>
+      <li><strong>Choose your hall.</strong> The Conference is seven rooms
+        around an atrium: a hall with a stage, a code lab, the sponsor row, a
+        food court, a garden deck and a lounge by the pool. The Beach is a
+        boardwalk, sand and a sea you can swim in. Each sign shows how many
+        people are inside right now.</li>
+      <li><strong>Walk around.</strong> Joystick on a phone, arrow keys or
+        WASD on a laptop. Nametags appear as you get close, reactions float
+        over your bean, and the minimap shows where you are.</li>
     </ol>
 
-    <h2>Open source</h2>
+    <h2 class="eyebrow">Make it your event's</h2>
     <p>
-      Flutter and Flame in the browser, a Dart relay on the server, MIT
-      licensed. The code, the design notes and the load-test numbers are all on
-      <a href="https://github.com/flutterboy20/virtual_meetup">GitHub</a>.
+      The name on the badge, the lines around it, the code lab's projector,
+      the hall's screen, the sponsor booths and the QR code in the corner are
+      all set from a moderator screen while the event is running. No rebuild
+      and no redeploy, just a reload. The same screen can mute a name, kick
+      someone or ban them.
     </p>
 
-    <h2>Contact</h2>
+    <h2 class="eyebrow">Under the hood</h2>
+    <ul>
+      <li>Flutter and Flame in the browser. Every bean, prop and floor is
+        drawn in code as a paper diorama, so there are no image files to wait
+        for on venue wifi.</li>
+      <li>Your phone owns its own position and sends it to a small Dart relay,
+        which passes it on only to the people near you. That is how a few
+        hundred people share one map: it has been load-tested at 300 at
+        once.</li>
+      <li>MIT licensed. The code, the design notes and the load-test numbers
+        are on <a href="https://github.com/flutterboy20/virtual_meetup">GitHub</a>.</li>
+    </ul>
+
+    <h2 class="eyebrow">Contact</h2>
     <p>
       <a href="mailto:hello@virtualmeetup.dev">hello@virtualmeetup.dev</a>
     </p>
